@@ -3,30 +3,38 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SpiderNet 2.0 — מוקד ענן</title>
+<title>מוקד ספיידרנט 2.0</title>
 <link rel="icon" type="image/x-icon" href="./favicon.ico">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="./supabase-config.js"></script>
 <style>
-  :root { --bg:#0d1117; --panel:#161b22; --border:#2d333b; --text:#e6edf3; --muted:#8b949e; --red:#f85149; --green:#3fb950; }
+  :root { --bg:#0d1117; --panel:#161b22; --card:#1c2129; --border:#2d333b; --text:#e6edf3; --muted:#8b949e;
+          --red:#f85149; --green:#3fb950; --amber:#d29922; --accent:#2f81f7; }
   * { box-sizing:border-box; margin:0; }
   body { background:var(--bg); color:var(--text); font-family:'Segoe UI',Arial,sans-serif; }
-  header { display:flex; align-items:center; gap:12px; padding:12px 18px; background:var(--panel); border-bottom:1px solid var(--border); }
+  header { display:flex; align-items:center; gap:12px; padding:12px 18px; background:var(--panel); border-bottom:1px solid var(--border); flex-wrap:wrap; }
   header img { height:34px; background:#fff; border-radius:6px; padding:2px 8px; }
   header h1 { font-size:19px; }
   header .live { margin-inline-start:auto; display:flex; gap:6px; align-items:center; font-size:13px; color:var(--muted); }
-  .dot { width:9px; height:9px; border-radius:50%; background:var(--green); animation:p 1.5s infinite; }
+  .pulse { width:9px; height:9px; border-radius:50%; background:var(--green); animation:p 1.5s infinite; }
   @keyframes p { 50% { opacity:.3; } }
-  main { max-width: 900px; margin: 0 auto; padding: 14px; }
-  .ev { background:#161b22; border:1px solid var(--border); border-radius:10px; padding:10px 12px; margin-bottom:10px; display:flex; gap:10px; }
+  /* עץ מימין, אירועי הבחירה משמאל; במסך צר — אחד מתחת לשני */
+  main { max-width: 1400px; margin: 0 auto; padding: 14px; display:grid; grid-template-columns: minmax(360px, 460px) 1fr; gap:14px; align-items:start; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  .pane-ev { min-width:0; }
+  .ev-head { display:flex; align-items:center; gap:10px; margin-bottom:10px; min-height:34px; }
+  .ev-head .t { font-size:15px; font-weight:600; }
+  .ev-head .sub { font-size:12.5px; color:var(--muted); }
+  .ev-head .btn { margin-inline-start:auto; }
+  .ev { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:10px 12px; margin-bottom:10px; display:flex; gap:10px; }
   .ev img { width:110px; height:72px; object-fit:cover; border-radius:6px; }
   .ev .meta { font-size:13px; line-height:1.55; }
   .badge { display:inline-block; font-size:11px; border-radius:5px; padding:1px 8px; margin-inline-end:6px; background:#3d1d20; color:var(--red); }
   .badge.cam { background:#241a33; color:#c39dff; }
+  .badge.camn { background:#1d2733; color:#79c0ff; }
   .site { font-size:11px; color:var(--muted); }
-  .time { color:var(--muted); font-size:12px; }
   .empty { text-align:center; color:var(--muted); padding:40px 0; }
-  h2 { font-size:15px; margin: 14px 0 10px; color:var(--muted); }
+  h2 { font-size:15px; margin: 4px 0 10px; color:var(--muted); }
   .login { max-width:340px; margin:70px auto; background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:22px; }
   .login h2 { color:var(--text); margin:0 0 14px; font-size:17px; }
   .login label { display:block; font-size:13px; color:var(--muted); margin:10px 0 4px; }
@@ -37,13 +45,50 @@
   .err { color:var(--red); font-size:13px; margin-top:10px; min-height:18px; }
   header button { background:transparent; color:var(--muted); border:1px solid var(--border); padding:4px 10px; }
   [hidden] { display:none !important; }
+  /* ---- עץ מכשירים ---- */
+  .summary { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
+  .stat { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:8px 14px; font-size:13px; color:var(--muted); }
+  .stat b { font-size:20px; display:block; color:var(--text); }
+  .stat.on b { color:var(--green); } .stat.off b { color:var(--red); }
+  .toolbar { display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap; }
+  .btn { background:var(--accent); color:#fff; border:none; border-radius:8px; padding:7px 14px; font-size:13px; cursor:pointer; font-family:inherit; }
+  .btn.ghost { background:none; border:1px solid var(--border); color:var(--text); }
+  .tree { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:6px; }
+  .row { display:flex; align-items:center; gap:8px; padding:7px 8px; border-radius:7px; }
+  .row:hover { background:var(--card); }
+  .row .name { font-size:14px; }
+  .row .meta { font-size:12px; color:var(--muted); }
+  /* כפתורי פעולה — רק במעבר עכבר או בשורה הנבחרת, כדי שהעץ יישאר קריא */
+  .row .acts { margin-inline-start:auto; display:none; gap:4px; flex:none; }
+  .row:hover .acts, .row.sel .acts { display:flex; }
+  .row .txt { display:flex; flex-direction:column; min-width:0; flex:1; }
+  .row .txt .name, .row .txt .meta { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ico { background:none; border:1px solid var(--border); color:var(--muted); border-radius:6px; padding:2px 8px; font-size:12px; cursor:pointer; font-family:inherit; }
+  .ico:hover { color:var(--text); }
+  .ico.del:hover { color:var(--red); }
+  .caret { width:18px; text-align:center; cursor:pointer; color:var(--muted); user-select:none; }
+  .row .name { cursor:pointer; display:flex; align-items:center; gap:7px; }
+  .folder .name { font-weight:600; }
+  .row.sel { background:#16263d; box-shadow: inset 3px 0 0 var(--accent); }
+  .ic { width:20px; height:20px; flex:none; }
+  .kids { margin-inline-start:22px; border-inline-start:1px dashed var(--border); padding-inline-start:4px; }
+  .sdot { width:11px; height:11px; border-radius:50%; flex:none; background:#555; }
+  .sdot.on { background:var(--green); box-shadow:0 0 6px var(--green); }
+  .sdot.off { background:var(--red); }
+  .cnt { font-size:11.5px; border-radius:10px; padding:1px 8px; background:#12261a; color:var(--green); }
+  .cnt.bad { background:#3d1d20; color:var(--red); }
+  .modal { position:fixed; inset:0; background:rgba(0,0,0,.75); display:flex; align-items:center; justify-content:center; z-index:50; }
+  .modal .box { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:18px; width:min(560px, 94vw); }
+  .modal textarea { width:100%; margin:10px 0; background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:7px;
+                    padding:8px; font-family:monospace; font-size:12px; direction:ltr; }
+  .modal ol { font-size:13px; line-height:1.8; padding-inline-start:20px; color:var(--muted); }
 </style>
 </head>
 <body>
 <header>
   <img src="./logo.png" alt="SpiderNet">
-  <h1>מוקד ענן</h1>
-  <div class="live" id="live" hidden><span class="dot"></span> חי</div>
+  <h1>מוקד ספיידרנט 2.0</h1>
+  <div class="live" id="live" hidden><span class="pulse"></span> חי</div>
   <button id="logout" hidden>יציאה</button>
 </header>
 <form class="login" id="login" hidden>
@@ -56,9 +101,36 @@
   <div class="err" id="loginErr"></div>
 </form>
 <main id="app" hidden>
-  <h2>אירועים מכל האתרים — מתעדכן בזמן אמת</h2>
-  <div id="feed"><div class="empty">ממתין לאירועים...</div></div>
+  <section id="tab-devices">
+    <div class="summary" id="summary"></div>
+    <div class="toolbar">
+      <button class="btn" id="addCustomer">+ לקוח</button>
+      <button class="btn ghost" id="expandAll">פתח הכל</button>
+      <button class="btn ghost" id="collapseAll">סגור הכל</button>
+    </div>
+    <div class="tree" id="tree"><div class="empty">טוען...</div></div>
+  </section>
+  <section class="pane-ev">
+    <div class="ev-head">
+      <div><div class="t" id="evTitle">כל האירועים</div><div class="sub" id="evSub">מכל המכשירים — מתעדכן בזמן אמת</div></div>
+      <button class="btn ghost" id="showAll" hidden>הצג הכל</button>
+    </div>
+    <div id="feed"><div class="empty">ממתין לאירועים...</div></div>
+  </section>
 </main>
+<div class="modal" id="pairModal" hidden><div class="box">
+  <b id="pairTitle">קוד חיבור</b>
+  <textarea id="pairCode" rows="5" readonly></textarea>
+  <ol>
+    <li>במכשיר בשטח: הגדרות ← טאב <b>כללי</b> ← "חיבור למוקד בענן"</li>
+    <li>הדבק את הקוד, סמן "דווח למוקד" ולחץ <b>שמור וחבר</b></li>
+    <li>תוך כמה שניות המכשיר יופיע כאן בירוק</li>
+  </ol>
+  <div style="display:flex; gap:8px; margin-top:10px">
+    <button class="btn" id="pairCopy" style="flex:1">העתק קוד</button>
+    <button class="btn ghost" id="pairClose">סגור</button>
+  </div>
+</div></div>
 <script>
 const cfg = typeof SUPABASE_CONFIG !== "undefined" ? SUPABASE_CONFIG : null;
 const feed = document.getElementById("feed");
@@ -75,53 +147,280 @@ async function signImages(client, rows) {
 }
 
 function render(rows) {
-  if (!rows.length) { feed.innerHTML = '<div class="empty">אין אירועים עדיין</div>'; return; }
+  if (!rows.length) { feed.innerHTML = `<div class="empty">${sel.type === "all" ? "אין אירועים עדיין" : "אין אירועים לבחירה הזאת"}</div>`; return; }
   feed.innerHTML = rows.map(e => {
     const src = signed.get(e.image_path);
     const img = src ? `<img src="${esc(src)}">` : "";
-    const cam = e.kind === "camera" ? `<span class="badge cam">מצלמה</span>` : `<span class="badge">${esc(e.action)}</span>`;
+    const kind = e.kind === "camera" ? `<span class="badge cam">בריאות מצלמה</span>` : `<span class="badge">${esc(e.action)}</span>`;
+    const camn = e.camera ? `<span class="badge camn">${esc(e.camera)}</span>` : "";
+    const dev = devices.find(d => d.id === e.device_id);
+    const devn = dev && sel.type !== "device" ? `<span class="badge" style="background:#12261a;color:var(--green)">${esc(dev.name)}</span>` : "";
     const site = e.site ? `<span class="site">${esc(e.site)}</span> • ` : "";
-    return `<div class="ev">${img}<div class="meta">${cam}
+    return `<div class="ev">${img}<div class="meta">${kind}${devn}${camn}
       <b>${new Date((e.ts || 0) * 1000).toLocaleString("he-IL")}</b><br>${esc(e.message)}<br>
       <span class="site">${site}חוק: ${esc(e.rule || "-")}</span></div></div>`;
   }).join("");
 }
 
+// ================= עץ מכשירים =================
+const ICON_FOLDER = `<svg class="ic" viewBox="0 0 24 24"><defs><linearGradient id="gf" x1="0" y1="0" x2="0" y2="1">
+  <stop offset="0" stop-color="#ffd865"/><stop offset="1" stop-color="#f0a92e"/></linearGradient></defs>
+  <path d="M2.5 6.2c0-1 .8-1.7 1.7-1.7h5l2 2.2h8.6c1 0 1.7.8 1.7 1.7v9.4c0 1-.8 1.7-1.7 1.7H4.2c-1 0-1.7-.8-1.7-1.7z" fill="#d18c1c"/>
+  <path d="M2.5 9.2c0-.9.8-1.7 1.7-1.7h15.6c1 0 1.7.8 1.7 1.7v8.6c0 1-.8 1.7-1.7 1.7H4.2c-1 0-1.7-.8-1.7-1.7z" fill="url(#gf)"/></svg>`;
+const ICON_CUSTOMER = `<svg class="ic" viewBox="0 0 24 24"><rect x="4" y="3" width="11" height="18" rx="1.5" fill="#3b82f6"/>
+  <rect x="15" y="9" width="5.5" height="12" rx="1.2" fill="#2563eb"/>
+  <g fill="#dbeafe"><rect x="6.3" y="5.5" width="2.2" height="2.2" rx=".4"/><rect x="10.5" y="5.5" width="2.2" height="2.2" rx=".4"/>
+  <rect x="6.3" y="9.8" width="2.2" height="2.2" rx=".4"/><rect x="10.5" y="9.8" width="2.2" height="2.2" rx=".4"/>
+  <rect x="6.3" y="14.1" width="2.2" height="2.2" rx=".4"/><rect x="10.5" y="14.1" width="2.2" height="2.2" rx=".4"/>
+  <rect x="16.6" y="11.5" width="2.2" height="2" rx=".4"/><rect x="16.6" y="15.3" width="2.2" height="2" rx=".4"/></g>
+  <rect x="8.3" y="17.6" width="2.4" height="3.4" fill="#1e3a8a"/></svg>`;
+const ICON_DEVICE = `<svg class="ic" viewBox="0 0 24 24" style="width:18px;height:18px"><rect x="3" y="4" width="18" height="12" rx="2" fill="#4b5563"/>
+  <rect x="5" y="6" width="14" height="8" rx="1" fill="#111827"/><circle cx="12" cy="10" r="2.4" fill="#60a5fa"/>
+  <rect x="9" y="17.5" width="6" height="2.5" rx="1" fill="#6b7280"/></svg>`;
+
+// בחירה בעץ: all | device | folder — קובעת אילו אירועים מוצגים משמאל
+let sel = {type: "all", id: null};
+let nodes = [], devices = [];
+const collapsed = new Set(JSON.parse(localStorage.getItem("collapsed") || "[]"));
+const saveCollapsed = () => localStorage.setItem("collapsed", JSON.stringify([...collapsed]));
+
+// מחובר = דיווח אחרון בתוך מרווח הדיווח + מרווח ביטחון (רשת איטית, שעון לא מסונכרן)
+function devState(d) {
+  if (!d.last_seen) return "never";
+  const age = (Date.now() - new Date(d.last_seen).getTime()) / 1000;
+  return age <= Math.max(d.heartbeat_sec * 1.5, d.heartbeat_sec + 20) ? "on" : "off";
+}
+function agoText(ts) {
+  if (!ts) return "טרם התחבר";
+  const s = Math.max(0, Math.round((Date.now() - new Date(ts).getTime()) / 1000));
+  if (s < 60) return `לפני ${s} שנ'`;
+  if (s < 3600) return `לפני ${Math.round(s / 60)} דק'`;
+  if (s < 86400) return `לפני ${Math.round(s / 3600)} שע'`;
+  return new Date(ts).toLocaleString("he-IL");
+}
+// ספירת מכשירים מחוברים/כולל בתיקייה וכל מה שמתחתיה
+function subtree(id) {
+  const ids = new Set([id]);
+  let grew = true;
+  while (grew) { grew = false; nodes.forEach(n => { if (n.parent_id && ids.has(n.parent_id) && !ids.has(n.id)) { ids.add(n.id); grew = true; } }); }
+  const ds = devices.filter(d => ids.has(d.node_id));
+  return {total: ds.length, on: ds.filter(d => devState(d) === "on").length};
+}
+function deviceRow(d) {
+  const st = devState(d), i = d.info || {};
+  const cams = i.cameras_total ? ` • מצלמות ${i.cameras_online}/${i.cameras_total}` : "";
+  const label = {on: "מחובר", off: "מנותק", never: "ממתין לחיבור ראשון"}[st];
+  return `<div class="row ${sel.type === "device" && sel.id === d.id ? "sel" : ""}" onclick="selectDevice('${d.id}')">
+    <span class="sdot ${st}" title="${label}"></span>
+    <span class="txt"><span class="name">${ICON_DEVICE}${esc(d.name)}</span>
+      <span class="meta">${label} • ${agoText(d.last_seen)}${cams} • כל ${d.heartbeat_sec} שנ'</span></span>
+    <span class="acts" onclick="event.stopPropagation()">
+      <button class="ico" onclick="showPair('${d.id}')">קוד חיבור</button>
+      <button class="ico" onclick="renameDevice('${d.id}')">שם</button>
+      <button class="ico" onclick="moveDevice('${d.id}')">העבר</button>
+      <button class="ico" onclick="setInterval_('${d.id}')">מרווח</button>
+      <button class="ico del" onclick="delDevice('${d.id}')">מחק</button>
+    </span></div>`;
+}
+function folderHtml(n) {
+  const kids = nodes.filter(x => x.parent_id === n.id).sort((a, b) => a.name.localeCompare(b.name, "he"));
+  const devs = devices.filter(d => d.node_id === n.id).sort((a, b) => a.name.localeCompare(b.name, "he"));
+  const c = subtree(n.id), closed = collapsed.has(n.id);
+  const cnt = c.total ? `<span class="cnt ${c.on < c.total ? "bad" : ""}">${c.on}/${c.total}</span>` : "";
+  return `<div class="folder"><div class="row ${sel.type === "folder" && sel.id === n.id ? "sel" : ""}">
+      <span class="caret" onclick="toggle('${n.id}')">${kids.length || devs.length ? (closed ? "◂" : "▾") : "·"}</span>
+      <span class="name" onclick="selectFolder('${n.id}')" title="הצג את כל האירועים של התיקייה">${n.kind === "customer" ? ICON_CUSTOMER : ICON_FOLDER}${esc(n.name)}</span> ${cnt}
+      <span class="acts">
+        <button class="ico" onclick="addDevice('${n.id}')">+ מכשיר</button>
+        <button class="ico" onclick="addFolder('${n.id}')">+ תיקייה</button>
+        <button class="ico" onclick="renameFolder('${n.id}')">שם</button>
+        <button class="ico del" onclick="delFolder('${n.id}')">מחק</button>
+      </span></div>
+    ${closed ? "" : `<div class="kids">${kids.map(folderHtml).join("")}${devs.map(deviceRow).join("")}</div>`}</div>`;
+}
+function renderTree() {
+  const roots = nodes.filter(n => !n.parent_id).sort((a, b) => a.name.localeCompare(b.name, "he"));
+  const loose = devices.filter(d => !d.node_id || !nodes.some(n => n.id === d.node_id));
+  const on = devices.filter(d => devState(d) === "on").length;
+  const never = devices.filter(d => devState(d) === "never").length;
+  $("summary").innerHTML = `<div class="stat"><b>${devices.length}</b>מכשירים</div>
+    <div class="stat on"><b>${on}</b>מחוברים</div>
+    <div class="stat off"><b>${devices.length - on - never}</b>מנותקים</div>
+    ${never ? `<div class="stat"><b>${never}</b>ממתינים לחיבור ראשון</div>` : ""}`;
+  $("tree").innerHTML = (roots.map(folderHtml).join("")
+    + (loose.length ? `<div class="folder"><div class="row"><span class="caret">▾</span><span class="name" style="color:var(--muted)">לא משויכים</span></div>
+       <div class="kids">${loose.map(deviceRow).join("")}</div></div>` : ""))
+    || '<div class="empty">העץ ריק — התחל ב"+ לקוח"</div>';
+}
+function toggle(id) { collapsed.has(id) ? collapsed.delete(id) : collapsed.add(id); saveCollapsed(); renderTree(); }
+
+// קוד חיבור: כתובת הפרויקט + מפתח ציבורי + מזהה + אסימון — המכשיר מפענח אותו (app/central_link.py)
+function pairCode(d) {
+  const json = JSON.stringify({u: cfg.url, k: cfg.anonKey, d: d.id, t: d.token, n: d.name});
+  const b64 = btoa(unescape(encodeURIComponent(json))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return "SPN1." + b64;
+}
+function showPair(id) {
+  const d = devices.find(x => x.id === id);
+  $("pairTitle").textContent = `קוד חיבור — ${d.name}`;
+  $("pairCode").value = pairCode(d);
+  $("pairModal").hidden = false;
+  $("pairCode").select();
+}
+$("pairClose").onclick = () => $("pairModal").hidden = true;
+$("pairCopy").onclick = async () => {
+  try { await navigator.clipboard.writeText($("pairCode").value); } catch (e) { $("pairCode").select(); document.execCommand("copy"); }
+  $("pairCopy").textContent = "הועתק ✓"; setTimeout(() => $("pairCopy").textContent = "העתק קוד", 1500);
+};
+
+let client = null;
+async function db(q) {   // מריץ שאילתה, מציג שגיאה, ומרענן
+  const { data, error } = await q;
+  if (error) { alert("שגיאה: " + error.message); throw error; }
+  await loadTree();
+  return data;
+}
+async function loadTree() {
+  const [n, d] = await Promise.all([
+    client.from("tree_nodes").select("*"),
+    client.from("devices").select("*"),
+  ]);
+  if (n.error || d.error) { $("tree").innerHTML = `<div class="empty">שגיאה: ${esc((n.error || d.error).message)}</div>`; return; }
+  nodes = n.data; devices = d.data;
+  // הפריט הנבחר נמחק — חוזרים ל"כל האירועים"
+  if ((sel.type === "device" && !devices.some(x => x.id === sel.id)) ||
+      (sel.type === "folder" && !nodes.some(x => x.id === sel.id))) { sel = {type: "all", id: null}; loadEvents(); }
+  renderTree();
+}
+async function addFolder(parent) {
+  const name = prompt(parent ? "שם התיקייה (למשל: אתר א׳):" : "שם הלקוח:");
+  if (!name || !name.trim()) return;
+  await db(client.from("tree_nodes").insert({name: name.trim(), parent_id: parent || null, kind: parent ? "group" : "customer"}));
+  if (parent) { collapsed.delete(parent); saveCollapsed(); }
+}
+$("addCustomer").onclick = () => addFolder(null);
+$("expandAll").onclick = () => { collapsed.clear(); saveCollapsed(); renderTree(); };
+$("collapseAll").onclick = () => { nodes.forEach(n => collapsed.add(n.id)); saveCollapsed(); renderTree(); };
+async function renameFolder(id) {
+  const n = nodes.find(x => x.id === id), name = prompt("שם חדש:", n.name);
+  if (name && name.trim() && name !== n.name) await db(client.from("tree_nodes").update({name: name.trim()}).eq("id", id));
+}
+async function delFolder(id) {
+  const n = nodes.find(x => x.id === id), c = subtree(id);
+  if (!confirm(`למחוק את "${n.name}" וכל התיקיות שבתוכה?` + (c.total ? `\n${c.total} מכשירים יעברו ל"לא משויכים" (לא נמחקים).` : ""))) return;
+  await db(client.from("tree_nodes").delete().eq("id", id));
+}
+async function addDevice(nodeId) {
+  const name = prompt("שם המכשיר (למשל: מחשב ניטור — כניסה):");
+  if (!name || !name.trim()) return;
+  const data = await db(client.from("devices").insert({name: name.trim(), node_id: nodeId}).select());
+  collapsed.delete(nodeId); saveCollapsed(); renderTree();
+  showPair(data[0].id);   // מיד אחרי ההוספה — הקוד להדבקה במכשיר
+}
+async function renameDevice(id) {
+  const d = devices.find(x => x.id === id), name = prompt("שם חדש למכשיר:", d.name);
+  if (name && name.trim() && name !== d.name) await db(client.from("devices").update({name: name.trim()}).eq("id", id));
+}
+function folderPath(n) { const p = []; while (n) { p.unshift(n.name); n = nodes.find(x => x.id === n.parent_id); } return p.join(" / "); }
+async function moveDevice(id) {
+  const d = devices.find(x => x.id === id);
+  const list = nodes.map(n => ({id: n.id, path: folderPath(n)})).sort((a, b) => a.path.localeCompare(b.path, "he"));
+  if (!list.length) return alert("אין תיקיות — צור לקוח קודם");
+  const pick = prompt(`להעביר את "${d.name}" לאיזו תיקייה? הקלד מספר:\n` + list.map((x, i) => `${i + 1}. ${x.path}`).join("\n"));
+  const i = parseInt(pick, 10) - 1;
+  if (list[i]) await db(client.from("devices").update({node_id: list[i].id}).eq("id", id));
+}
+async function setInterval_(id) {
+  const d = devices.find(x => x.id === id);
+  const v = parseInt(prompt("כל כמה שניות המכשיר ידווח שהוא חי? (10–3600, ברירת מחדל 60)", d.heartbeat_sec), 10);
+  if (v >= 10 && v <= 3600 && v !== d.heartbeat_sec) await db(client.from("devices").update({heartbeat_sec: v}).eq("id", id));
+}
+async function delDevice(id) {
+  const d = devices.find(x => x.id === id);
+  if (!confirm(`למחוק את "${d.name}"? המכשיר יפסיק להיות מוכר למוקד (קוד החיבור שלו יבוטל).`)) return;
+  await db(client.from("devices").delete().eq("id", id));
+}
+
+// ---------- בחירה בעץ → אירועים ----------
+function folderIds(id) {   // התיקייה וכל מה שמתחתיה
+  const ids = new Set([id]);
+  let grew = true;
+  while (grew) { grew = false; nodes.forEach(n => { if (n.parent_id && ids.has(n.parent_id) && !ids.has(n.id)) { ids.add(n.id); grew = true; } }); }
+  return ids;
+}
+function selDeviceIds() {   // null = הכל
+  if (sel.type === "device") return [sel.id];
+  if (sel.type === "folder") { const f = folderIds(sel.id); return devices.filter(d => f.has(d.node_id)).map(d => d.id); }
+  return null;
+}
+function selectDevice(id) { sel = {type: "device", id}; renderTree(); loadEvents(); }
+function selectFolder(id) { sel = {type: "folder", id}; renderTree(); loadEvents(); }
+$("showAll").onclick = () => { sel = {type: "all", id: null}; renderTree(); loadEvents(); };
+function evHeader() {
+  if (sel.type === "device") {
+    const d = devices.find(x => x.id === sel.id);
+    $("evTitle").textContent = "אירועים — " + (d ? d.name : "");
+    $("evSub").textContent = d ? `${{on: "מחובר", off: "מנותק", never: "טרם התחבר"}[devState(d)]} • ${agoText(d.last_seen)}` : "";
+  } else if (sel.type === "folder") {
+    const n = nodes.find(x => x.id === sel.id), c = subtree(sel.id);
+    $("evTitle").textContent = "אירועים — " + (n ? folderPath(n) : "");
+    $("evSub").textContent = `${c.total} מכשירים בתיקייה • ${c.on} מחוברים`;
+  } else {
+    $("evTitle").textContent = "כל האירועים";
+    $("evSub").textContent = "מכל המכשירים — מתעדכן בזמן אמת";
+  }
+  $("showAll").hidden = sel.type === "all";
+}
+let rows = [], evToken = 0;
+async function loadEvents() {
+  evHeader();
+  const tok = ++evToken, ids = selDeviceIds();
+  if (ids && !ids.length) { rows = []; render(rows); return; }
+  feed.innerHTML = '<div class="empty">טוען אירועים...</div>';
+  let q = client.from("events").select("*").order("ts", { ascending: false }).limit(60);
+  if (ids) q = ids.length === 1 ? q.eq("device_id", ids[0]) : q.in("device_id", ids);
+  const { data, error } = await q;
+  if (tok !== evToken) return;    // בינתיים נבחר משהו אחר
+  if (error) { feed.innerHTML = '<div class="empty">שגיאת חיבור לענן: ' + esc(error.message) + '</div>'; return; }
+  rows = data || [];
+  await signImages(client, rows);
+  if (tok === evToken) render(rows);
+}
+
 if (!cfg || !cfg.anonKey || cfg.anonKey === 'מלא-כאן') {
   $("app").hidden = false;
-  feed.innerHTML = '<div class="empty">חסרה הגדרת Supabase — מלאו את supabase-config.js</div>';
+  $("tree").innerHTML = feed.innerHTML = '<div class="empty">חסרה הגדרת Supabase — מלאו את supabase-config.js</div>';
 } else {
-  const client = supabase.createClient(cfg.url, cfg.anonKey);
-  let rows = [];
-  let channel = null;
+  client = supabase.createClient(cfg.url, cfg.anonKey);
+  let channels = [], ticker = null;
 
-  async function startFeed() {
+  async function startApp() {
     $("login").hidden = true;
     $("app").hidden = false; $("live").hidden = false; $("logout").hidden = false;
-    feed.innerHTML = '<div class="empty">טוען אירועים...</div>';
-    const { data, error } = await client
-      .from("events")
-      .select("*")
-      .order("ts", { ascending: false })
-      .limit(60);
-    if (error) { feed.innerHTML = '<div class="empty">שגיאת חיבור לענן: ' + esc(error.message) + '</div>'; return; }
-    rows = data || [];
-    await signImages(client, rows);
-    render(rows);
-    if (channel) return;
-    channel = client
-      .channel("events-feed")
+    await loadTree();
+    loadEvents();
+    // ירוק/אדום תלוי בזמן שעבר — מחשבים מחדש כל 5 שניות גם בלי שינוי בנתונים
+    ticker = setInterval(() => { renderTree(); evHeader(); }, 5000);
+    if (channels.length) return;
+    channels.push(client.channel("events-feed")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "events" }, async payload => {
+        const ids = selDeviceIds();
+        if (ids && !ids.includes(payload.new.device_id)) return;   // לא שייך לבחירה הנוכחית
         rows = [payload.new, ...rows].slice(0, 60);
         await signImages(client, [payload.new]);
         render(rows);
-      })
-      .subscribe();
+      }).subscribe());
+    // כל הארטביט / שינוי בעץ — מרעננים
+    channels.push(client.channel("tree")
+      .on("postgres_changes", { event: "*", schema: "public", table: "devices" }, loadTree)
+      .on("postgres_changes", { event: "*", schema: "public", table: "tree_nodes" }, loadTree)
+      .subscribe());
   }
 
   function showLogin() {
-    if (channel) { client.removeChannel(channel); channel = null; }
-    rows = []; signed.clear(); feed.innerHTML = "";
+    channels.forEach(c => client.removeChannel(c)); channels = [];
+    if (ticker) { clearInterval(ticker); ticker = null; }
+    rows = []; signed.clear(); feed.innerHTML = ""; nodes = []; devices = []; sel = {type: "all", id: null};
     $("app").hidden = true; $("live").hidden = true; $("logout").hidden = true;
     $("login").hidden = false;
     $("password").value = "";
@@ -135,12 +434,12 @@ if (!cfg || !cfg.anonKey || cfg.anonKey === 'מלא-כאן') {
     });
     $("loginBtn").disabled = false;
     if (error) { $("loginErr").textContent = "אימייל או סיסמה שגויים"; return; }
-    startFeed();
+    startApp();
   });
 
   $("logout").addEventListener("click", async () => { await client.auth.signOut(); showLogin(); });
 
-  client.auth.getSession().then(({ data }) => data.session ? startFeed() : showLogin());
+  client.auth.getSession().then(({ data }) => data.session ? startApp() : showLogin());
 }
 </script>
 </body>
