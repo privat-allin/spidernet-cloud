@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SpiderNet 2.0 — מוקד ענן</title>
+<link rel="icon" type="image/x-icon" href="./favicon.ico">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="./supabase-config.js"></script>
+<style>
+  :root { --bg:#0d1117; --panel:#161b22; --border:#2d333b; --text:#e6edf3; --muted:#8b949e; --red:#f85149; --green:#3fb950; }
+  * { box-sizing:border-box; margin:0; }
+  body { background:var(--bg); color:var(--text); font-family:'Segoe UI',Arial,sans-serif; }
+  header { display:flex; align-items:center; gap:12px; padding:12px 18px; background:var(--panel); border-bottom:1px solid var(--border); }
+  header img { height:34px; background:#fff; border-radius:6px; padding:2px 8px; }
+  header h1 { font-size:19px; }
+  header .live { margin-inline-start:auto; display:flex; gap:6px; align-items:center; font-size:13px; color:var(--muted); }
+  .dot { width:9px; height:9px; border-radius:50%; background:var(--green); animation:p 1.5s infinite; }
+  @keyframes p { 50% { opacity:.3; } }
+  main { max-width: 900px; margin: 0 auto; padding: 14px; }
+  .ev { background:#161b22; border:1px solid var(--border); border-radius:10px; padding:10px 12px; margin-bottom:10px; display:flex; gap:10px; }
+  .ev img { width:110px; height:72px; object-fit:cover; border-radius:6px; }
+  .ev .meta { font-size:13px; line-height:1.55; }
+  .badge { display:inline-block; font-size:11px; border-radius:5px; padding:1px 8px; margin-inline-end:6px; background:#3d1d20; color:var(--red); }
+  .badge.cam { background:#241a33; color:#c39dff; }
+  .site { font-size:11px; color:var(--muted); }
+  .time { color:var(--muted); font-size:12px; }
+  .empty { text-align:center; color:var(--muted); padding:40px 0; }
+  h2 { font-size:15px; margin: 14px 0 10px; color:var(--muted); }
+  .login { max-width:340px; margin:70px auto; background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:22px; }
+  .login h2 { color:var(--text); margin:0 0 14px; font-size:17px; }
+  .login label { display:block; font-size:13px; color:var(--muted); margin:10px 0 4px; }
+  .login input { width:100%; padding:9px 10px; border-radius:7px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-size:15px; }
+  .login button, header button { cursor:pointer; border:0; border-radius:7px; font-size:14px; }
+  .login button { width:100%; margin-top:16px; padding:10px; background:var(--green); color:#fff; font-weight:600; }
+  .login button:disabled { opacity:.6; cursor:default; }
+  .err { color:var(--red); font-size:13px; margin-top:10px; min-height:18px; }
+  header button { background:transparent; color:var(--muted); border:1px solid var(--border); padding:4px 10px; }
+  [hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<header>
+  <img src="./logo.png" alt="SpiderNet">
+  <h1>מוקד ענן</h1>
+  <div class="live" id="live" hidden><span class="dot"></span> חי</div>
+  <button id="logout" hidden>יציאה</button>
+</header>
+<form class="login" id="login" hidden>
+  <h2>כניסה למוקד</h2>
+  <label for="email">אימייל</label>
+  <input id="email" type="email" autocomplete="username" required dir="ltr">
+  <label for="password">סיסמה</label>
+  <input id="password" type="password" autocomplete="current-password" required dir="ltr">
+  <button type="submit" id="loginBtn">כניסה</button>
+  <div class="err" id="loginErr"></div>
+</form>
+<main id="app" hidden>
+  <h2>אירועים מכל האתרים — מתעדכן בזמן אמת</h2>
+  <div id="feed"><div class="empty">ממתין לאירועים...</div></div>
+</main>
+<script>
+const cfg = typeof SUPABASE_CONFIG !== "undefined" ? SUPABASE_CONFIG : null;
+const feed = document.getElementById("feed");
+const $ = id => document.getElementById(id);
+const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+// ה-bucket פרטי — התמונות נטענות דרך קישורים חתומים (בתוקף שעה), רק למשתמש מחובר
+const signed = new Map();
+async function signImages(client, rows) {
+  const paths = rows.map(e => e.image_path).filter(p => p && !signed.has(p));
+  if (!paths.length) return;
+  const { data } = await client.storage.from("snapshots").createSignedUrls(paths, 3600);
+  (data || []).forEach(d => { if (d.signedUrl) signed.set(d.path, d.signedUrl); });
+}
+
+function render(rows) {
+  if (!rows.length) { feed.innerHTML = '<div class="empty">אין אירועים עדיין</div>'; return; }
+  feed.innerHTML = rows.map(e => {
+    const src = signed.get(e.image_path);
+    const img = src ? `<img src="${esc(src)}">` : "";
+    const cam = e.kind === "camera" ? `<span class="badge cam">מצלמה</span>` : `<span class="badge">${esc(e.action)}</span>`;
+    const site = e.site ? `<span class="site">${esc(e.site)}</span> • ` : "";
+    return `<div class="ev">${img}<div class="meta">${cam}
+      <b>${new Date((e.ts || 0) * 1000).toLocaleString("he-IL")}</b><br>${esc(e.message)}<br>
+      <span class="site">${site}חוק: ${esc(e.rule || "-")}</span></div></div>`;
+  }).join("");
+}
+
+if (!cfg || !cfg.anonKey || cfg.anonKey === 'מלא-כאן') {
+  $("app").hidden = false;
+  feed.innerHTML = '<div class="empty">חסרה הגדרת Supabase — מלאו את supabase-config.js</div>';
+} else {
+  const client = supabase.createClient(cfg.url, cfg.anonKey);
+  let rows = [];
+  let channel = null;
+
+  async function startFeed() {
+    $("login").hidden = true;
+    $("app").hidden = false; $("live").hidden = false; $("logout").hidden = false;
+    feed.innerHTML = '<div class="empty">טוען אירועים...</div>';
+    const { data, error } = await client
+      .from("events")
+      .select("*")
+      .order("ts", { ascending: false })
+      .limit(60);
+    if (error) { feed.innerHTML = '<div class="empty">שגיאת חיבור לענן: ' + esc(error.message) + '</div>'; return; }
+    rows = data || [];
+    await signImages(client, rows);
+    render(rows);
+    if (channel) return;
+    channel = client
+      .channel("events-feed")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "events" }, async payload => {
+        rows = [payload.new, ...rows].slice(0, 60);
+        await signImages(client, [payload.new]);
+        render(rows);
+      })
+      .subscribe();
+  }
+
+  function showLogin() {
+    if (channel) { client.removeChannel(channel); channel = null; }
+    rows = []; signed.clear(); feed.innerHTML = "";
+    $("app").hidden = true; $("live").hidden = true; $("logout").hidden = true;
+    $("login").hidden = false;
+    $("password").value = "";
+  }
+
+  $("login").addEventListener("submit", async ev => {
+    ev.preventDefault();
+    $("loginBtn").disabled = true; $("loginErr").textContent = "";
+    const { error } = await client.auth.signInWithPassword({
+      email: $("email").value.trim(), password: $("password").value,
+    });
+    $("loginBtn").disabled = false;
+    if (error) { $("loginErr").textContent = "אימייל או סיסמה שגויים"; return; }
+    startFeed();
+  });
+
+  $("logout").addEventListener("click", async () => { await client.auth.signOut(); showLogin(); });
+
+  client.auth.getSession().then(({ data }) => data.session ? startFeed() : showLogin());
+}
+</script>
+</body>
+</html>
