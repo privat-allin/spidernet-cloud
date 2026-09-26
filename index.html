@@ -730,7 +730,7 @@ function deviceRow(d) {
     <span class="caret" onclick="event.stopPropagation(); toggle('${key}')">${dc.length ? (closed ? "◂" : "▾") : "·"}</span>
     <span class="sdot ${st}" title="${label}"></span>
     <span class="txt"><span class="name">${ICON_DEVICE}${esc(d.name)}</span>
-      <span class="meta">${label} • ${agoText(d.last_seen)}${camsTxt} • אות חיים כל ${d.heartbeat_sec} שנ'</span></span>
+      <span class="meta">${label} • ${agoText(d.last_seen)}${camsTxt} • אות חיים כל ${d.heartbeat_sec} שנ'${i.ver ? ` • גרסה ${esc(i.ver)}${i.channel === "beta" ? " (בדיקות)" : ""}` : ""}</span></span>
     ${issues ? `<span class="warn" title="מצלמות מנותקות או חסרות">⚠ ${issues}</span>` : ""}
     ${armBadge(d)}
     ${remoteUrl(d) ? `<button class="open-ui" title="פתיחת ממשק המכשיר בטאב חדש (דרך NetBird)"
