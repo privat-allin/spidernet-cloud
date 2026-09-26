@@ -120,6 +120,14 @@
   .arm-quick .row2 { display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-top:6px; }
   .arm-quick select { background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:7px; padding:6px 8px; font-family:inherit; }
   .arm-log { font-size:12.5px; color:var(--muted); line-height:1.7; margin-top:8px; max-height:140px; overflow-y:auto; }
+  .log-tabs { display:flex; gap:6px; flex-wrap:wrap; margin:10px 0; }
+  .log-tabs button { background:none; border:1px solid var(--border); color:var(--muted); border-radius:8px; padding:6px 12px;
+                     font-size:13px; cursor:pointer; font-family:inherit; }
+  .log-tabs button.on { color:var(--text); border-color:var(--accent); background:#16263d; }
+  .log-tbl { width:100%; border-collapse:collapse; font-size:13px; }
+  .log-tbl th { text-align:right; color:var(--muted); font-weight:500; padding:6px; border-bottom:1px solid var(--border); position:sticky; top:0; background:var(--panel); }
+  .log-tbl td { padding:6px; border-bottom:1px solid var(--border); vertical-align:top; }
+  .log-tbl .t { white-space:nowrap; color:var(--muted); }
   .cust-list { font-size:13.5px; margin:10px 0; }
   .cust-list div { display:flex; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid var(--border); }
   .cust-list button { margin-inline-start:auto; }
@@ -181,6 +189,7 @@
       <button class="btn" id="addCustomer">+ לקוח</button>
       <button class="btn ghost" id="expandAll">פתח הכל</button>
       <button class="btn ghost" id="collapseAll">סגור הכל</button>
+      <button class="btn ghost" id="openLogs" title="יומני פעולות: דריכה ונטרול, תקינות מצלמות, התראות שווא">📋 יומנים</button>
     </div>
     <div class="tree" id="tree"><div class="empty">טוען...</div></div>
   </section>
@@ -212,7 +221,6 @@
       <button class="btn" type="button" style="background:#9e6a03" onclick="armQuick('disarm')">🔓 נטרל</button>
       <button class="btn ghost" type="button" id="armAuto" onclick="armQuick('auto')">↺ חזרה למצב הרגיל</button>
     </div>
-    <div class="arm-log" id="armLog"></div>
   </div>
   <div style="font-size:13.5px; font-weight:600; margin-top:12px">מצב רגיל</div>
   <div class="arm-modes" id="armModes">
@@ -234,6 +242,19 @@
     <button class="btn ghost" id="armCancel">ביטול</button>
   </div>
   <div style="font-size:12px; color:var(--muted); margin-top:8px">ההגדרה מגיעה למחשב בדיווח הבא שלו (עד דקה).</div>
+</div></div>
+<div class="modal" id="logModal" hidden><div class="box" style="width:min(860px, 96vw); max-height:90vh; display:flex; flex-direction:column">
+  <div style="display:flex; align-items:center; gap:10px">
+    <h2 style="color:var(--text); margin:0">📋 יומנים</h2>
+    <select id="logDev" style="margin-inline-start:auto; background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:7px; padding:5px 8px; font-family:inherit"></select>
+    <button class="btn ghost" id="logClose">סגור</button>
+  </div>
+  <div class="log-tabs" id="logTabs">
+    <button data-k="arming" class="on">דריכה ונטרול</button>
+    <button data-k="health">תקינות מצלמות</button>
+    <button data-k="fa">סימוני התראות שווא</button>
+  </div>
+  <div style="overflow-y:auto; flex:1; min-height:120px" id="logBody"></div>
 </div></div>
 <div class="modal" id="custModal" hidden><div class="box" style="width:min(520px, 96vw)">
   <h2 style="color:var(--text); margin-top:0" id="custTitle">משתמשי לקוח</h2>
@@ -357,7 +378,7 @@ function openArming(id) {
   const a = JSON.parse(JSON.stringify(armDev.arming || {mode: "always"}));
   armDraft = {mode: a.mode || "always", days: Object.assign(armDefaults(), a.days || {})};
   $("armTitle").textContent = "דריכה — " + armDev.name;
-  renderArming(); renderArmOvr(); loadArmLog();
+  renderArming(); renderArmOvr();
   $("armModal").hidden = false;
 }
 function renderArmOvr() {
@@ -365,19 +386,12 @@ function renderArmOvr() {
   $("armOvr").innerHTML = o ? `— <span style="color:#e3b341">${esc(ovrText(o))}</span>` : "— אין (פועל לפי המצב הרגיל)";
   $("armAuto").hidden = !o;
 }
-const ARM_ACT = {arm: "דריכה", disarm: "נטרול", auto: "חזרה למצב הרגיל"};
-async function loadArmLog() {
-  const { data } = await client.from("arming_log").select("*").eq("device_id", armDev.id).order("at", {ascending: false}).limit(15);
-  $("armLog").innerHTML = (data || []).length ? (data || []).map(r =>
-    `${new Date(r.at).toLocaleString("he-IL")} — ${ARM_ACT[r.action] || r.action}${r.minutes ? ` ל-${r.minutes} דק'` : (r.action === "auto" ? "" : " מלאה")}
-     • ${esc(r.who || "")} (${r.source === "customer" ? "לקוח" : "מוקד"})`).join("<br>") : "אין פעולות ידניות עדיין";
-}
 async function armQuick(action) {
   const min = $("armQuickMin").value ? parseInt($("armQuickMin").value, 10) : null;
   const { data, error } = await client.rpc("set_arming_override", {p_device: armDev.id, p_action: action, p_minutes: action === "auto" ? null : min});
   if (error) return alert("הפעולה נכשלה: " + error.message);
   armDev.arming = data; const d = devices.find(x => x.id === armDev.id); if (d) d.arming = data;
-  renderArmOvr(); loadArmLog(); renderTree();
+  renderArmOvr(); renderTree();
 }
 function renderArming() {
   document.querySelectorAll("#armModes label").forEach(l => {
@@ -423,6 +437,60 @@ $("armSave").onclick = async () => {
   $("armModal").hidden = true;
   loadTree();
 };
+
+// ================= יומנים =================
+// מקום אחד מסודר לכל היומנים: דריכה/נטרול (arming_log), תקינות מצלמות (אירועי kind=camera), סימוני שווא.
+const ARM_ACT = {arm: "🛡 דריכה", disarm: "🔓 נטרול", auto: "↺ חזרה למצב הרגיל"};
+let logKind = "arming";
+const devName = id => (devices.find(d => d.id === id) || {}).name || "—";
+function openLogs(devId) {
+  $("logDev").innerHTML = `<option value="">כל המכשירים</option>` +
+    devices.slice().sort((a, b) => a.name.localeCompare(b.name, "he")).map(d => `<option value="${d.id}">${esc(d.name)}</option>`).join("");
+  $("logDev").value = devId || (sel.type === "device" || sel.type === "camera" ? sel.id : "");
+  $("logModal").hidden = false;
+  loadLogs();
+}
+async function loadLogs() {
+  document.querySelectorAll("#logTabs button").forEach(b => b.classList.toggle("on", b.dataset.k === logKind));
+  const dev = $("logDev").value;
+  $("logBody").innerHTML = '<div class="empty">טוען...</div>';
+  let rows = [], head = "", q;
+  if (logKind === "arming") {
+    q = client.from("arming_log").select("*").order("at", {ascending: false}).limit(300);
+    if (dev) q = q.eq("device_id", dev);
+    const { data, error } = await q; if (error) return $("logBody").textContent = error.message;
+    head = "<th>זמן</th><th>מכשיר</th><th>פעולה</th><th>משך</th><th>מי</th>";
+    rows = (data || []).map(r => `<tr><td class="t">${new Date(r.at).toLocaleString("he-IL")}</td><td>${esc(devName(r.device_id))}</td>
+      <td>${ARM_ACT[r.action] || esc(r.action)}</td><td>${r.action === "auto" ? "" : (r.minutes ? r.minutes + " דק'" : "מלא")}</td>
+      <td>${esc(r.who || "")} <span style="color:var(--muted)">(${r.source === "customer" ? "לקוח" : "מוקד"})</span></td></tr>`);
+  } else if (logKind === "health") {
+    q = client.from("events").select("ts,device_id,channel,camera,message").eq("kind", "camera").order("ts", {ascending: false}).limit(300);
+    if (dev) q = q.eq("device_id", dev);
+    const { data, error } = await q; if (error) return $("logBody").textContent = error.message;
+    head = "<th>זמן</th><th>מכשיר</th><th>מצלמה</th><th>מה קרה</th>";
+    rows = (data || []).map(e => {
+      const d = devices.find(x => x.id === e.device_id);
+      return `<tr><td class="t">${new Date(e.ts * 1000).toLocaleString("he-IL")}</td><td>${esc(devName(e.device_id))}</td>
+        <td>${esc(e.channel && d ? camName(d, e.channel) : (e.camera || ""))}</td><td>${esc(e.message)}</td></tr>`;
+    });
+  } else {
+    q = client.from("events").select("id,ts,device_id,channel,camera,message,fa_by,fa_at,fa_source,fa_status,fa_note,fa_applied")
+      .not("false_alarm", "is", null).order("fa_at", {ascending: false, nullsFirst: false}).limit(300);
+    if (dev) q = q.eq("device_id", dev);
+    const { data, error } = await q; if (error) return $("logBody").textContent = error.message;
+    head = "<th>סומן</th><th>מכשיר</th><th>האירוע</th><th>מי</th><th>סטטוס</th>";
+    rows = (data || []).map(e => `<tr><td class="t">${e.fa_at ? new Date(e.fa_at).toLocaleString("he-IL") : ""}</td>
+      <td>${esc(devName(e.device_id))}</td><td>${esc(e.message)}${e.fa_note ? `<br><span style="color:var(--muted)">${esc(e.fa_note)}</span>` : ""}</td>
+      <td>${e.fa_source === "device" ? "במחשב המקומי" : esc(e.fa_by || "מוקד")}</td><td>${FA_STATUS[e.fa_status || "new"] || ""}</td></tr>`);
+  }
+  $("logBody").innerHTML = rows.length ? `<table class="log-tbl"><thead><tr>${head}</tr></thead><tbody>${rows.join("")}</tbody></table>`
+                                       : '<div class="empty">אין רשומות</div>';
+}
+document.querySelectorAll("#logTabs button").forEach(b => b.onclick = () => { logKind = b.dataset.k; loadLogs(); });
+$("logDev").onchange = loadLogs;
+$("openLogs").onclick = () => openLogs();
+$("logClose").onclick = () => $("logModal").hidden = true;
+$("logModal").onclick = e => { if (e.target.id === "logModal") $("logModal").hidden = true; };
 
 // ================= משתמשי לקוח (דף הדריכה) =================
 let custNode = null;
@@ -662,7 +730,7 @@ function deviceRow(d) {
     <span class="caret" onclick="event.stopPropagation(); toggle('${key}')">${dc.length ? (closed ? "◂" : "▾") : "·"}</span>
     <span class="sdot ${st}" title="${label}"></span>
     <span class="txt"><span class="name">${ICON_DEVICE}${esc(d.name)}</span>
-      <span class="meta">${label} • ${agoText(d.last_seen)}${camsTxt} • כל ${d.heartbeat_sec} שנ'</span></span>
+      <span class="meta">${label} • ${agoText(d.last_seen)}${camsTxt} • אות חיים כל ${d.heartbeat_sec} שנ'</span></span>
     ${issues ? `<span class="warn" title="מצלמות מנותקות או חסרות">⚠ ${issues}</span>` : ""}
     ${armBadge(d)}
     ${remoteUrl(d) ? `<button class="open-ui" title="פתיחת ממשק המכשיר בטאב חדש (דרך NetBird)"
@@ -671,11 +739,12 @@ function deviceRow(d) {
     <button class="menu-btn ${menuOpen === key ? "on" : ""}" title="פעולות" onclick="event.stopPropagation(); toggleMenu('${key}')">⋯</button>
     <span class="acts" onclick="event.stopPropagation()">
       <button class="ico" onclick="openArming('${d.id}')">דריכה</button>
+      <button class="ico" onclick="openLogs('${d.id}')">יומן</button>
       <button class="ico" onclick="setCamCount('${d.id}')">מספר מצלמות</button>
       <button class="ico" onclick="showPair('${d.id}')">קוד חיבור</button>
       <button class="ico" onclick="renameDevice('${d.id}')">שם</button>
       <button class="ico" onclick="moveDevice('${d.id}')">העבר</button>
-      <button class="ico" onclick="setInterval_('${d.id}')">מרווח</button>
+      <button class="ico" onclick="setInterval_('${d.id}')">אות חיים</button>
       <button class="ico del" onclick="delDevice('${d.id}')">מחק</button>
     </span></div>
     ${camRows ? `<div class="kids">${camRows}</div>` : ""}`;
@@ -825,7 +894,7 @@ async function moveDevice(id) {
 }
 async function setInterval_(id) {
   const d = devices.find(x => x.id === id);
-  const v = parseInt(prompt("כל כמה שניות המכשיר ידווח שהוא חי? (10–3600, ברירת מחדל 60)", d.heartbeat_sec), 10);
+  const v = parseInt(prompt("אות חיים — כל כמה שניות המכשיר ידווח שהוא חי? (10–3600, ברירת מחדל 60)", d.heartbeat_sec), 10);
   if (v >= 10 && v <= 3600 && v !== d.heartbeat_sec) await db(client.from("devices").update({heartbeat_sec: v}).eq("id", id));
 }
 const DELETE_CODE = "1234";
