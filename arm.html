@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0d1117">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="SpiderNet">
+<title>SpiderNet — דריכה</title>
+<link rel="manifest" href="./arm.webmanifest">
+<link rel="icon" href="./favicon.ico">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<style>
+  :root { --bg:#0d1117; --panel:#161b22; --card:#1c222b; --border:#2d333b; --text:#e6edf3; --muted:#8b949e;
+          --green:#3fb950; --red:#f85149; --amber:#d29922; --blue:#2f81f7; }
+  * { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+  body { background:var(--bg); color:var(--text); font-family:'Segoe UI', Arial, sans-serif; min-height:100vh;
+         padding: env(safe-area-inset-top) 16px calc(env(safe-area-inset-bottom) + 16px); }
+  header { display:flex; align-items:center; gap:10px; padding:14px 0; }
+  header img { height:34px; background:#fff; border-radius:6px; padding:2px 8px; }
+  header .t { font-weight:600; font-size:16px; }
+  header button { margin-inline-start:auto; background:none; border:1px solid var(--border); color:var(--muted);
+                  border-radius:8px; padding:5px 12px; font-family:inherit; font-size:13px; }
+  [hidden] { display:none !important; }
+  .login { max-width:380px; margin:40px auto; background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:22px; }
+  .login h2 { font-size:18px; margin-bottom:6px; }
+  .login p { color:var(--muted); font-size:13.5px; margin-bottom:10px; }
+  .login label { display:block; font-size:13px; color:var(--muted); margin:12px 0 5px; }
+  .login input { width:100%; padding:12px; border-radius:9px; border:1px solid var(--border); background:var(--bg);
+                 color:var(--text); font-size:16px; }
+  .login button { width:100%; margin-top:18px; padding:13px; border:0; border-radius:10px; background:var(--blue);
+                  color:#fff; font-size:16px; font-weight:600; font-family:inherit; }
+  .err { color:var(--red); font-size:13.5px; margin-top:10px; min-height:18px; text-align:center; }
+  .site { background:var(--panel); border:1px solid var(--border); border-radius:16px; padding:18px; margin:0 auto 14px; max-width:520px; }
+  .site .name { font-size:18px; font-weight:600; }
+  .site .folder { color:var(--muted); font-size:13px; }
+  .state { display:flex; align-items:center; gap:14px; margin:16px 0 6px; }
+  .orb { width:64px; height:64px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:30px; flex:none; }
+  .orb.armed { background:#12261a; box-shadow:0 0 0 3px var(--green), 0 0 24px rgba(63,185,80,.35); }
+  .orb.disarmed { background:#2a2111; box-shadow:0 0 0 3px var(--amber); }
+  .orb.unknown { background:#222; box-shadow:0 0 0 3px #444; }
+  .state .big { font-size:22px; font-weight:700; }
+  .state .sub { color:var(--muted); font-size:13.5px; margin-top:2px; line-height:1.5; }
+  .count { color:var(--amber); font-weight:600; }
+  .pending { color:#79c0ff; font-size:13px; margin-top:4px; }
+  .offline { color:var(--red); font-size:13px; margin-top:6px; }
+  .actions { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:14px; }
+  .actions button { border:0; border-radius:14px; padding:18px 8px; font-size:18px; font-weight:700; font-family:inherit; color:#fff; }
+  .btn-arm { background:#238636; }
+  .btn-dis { background:#9e6a03; }
+  .actions button:active { transform:scale(.98); }
+  .actions button:disabled { opacity:.5; }
+  .auto { display:block; width:100%; margin-top:10px; background:none; border:1px solid var(--border); color:var(--text);
+          border-radius:12px; padding:11px; font-size:14.5px; font-family:inherit; }
+  .base { color:var(--muted); font-size:12.5px; margin-top:12px; line-height:1.5; }
+  /* בחירת זמן */
+  .sheet-bg { position:fixed; inset:0; background:rgba(0,0,0,.6); display:flex; align-items:flex-end; justify-content:center; z-index:20; }
+  .sheet { background:var(--panel); border:1px solid var(--border); border-radius:18px 18px 0 0; width:100%; max-width:560px;
+           padding:18px 16px calc(env(safe-area-inset-bottom) + 18px); }
+  .sheet h3 { font-size:17px; margin-bottom:4px; }
+  .sheet p { color:var(--muted); font-size:13px; margin-bottom:12px; }
+  .durs { display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; }
+  .durs button { background:var(--card); border:1px solid var(--border); color:var(--text); border-radius:11px; padding:14px 4px;
+                 font-size:15px; font-family:inherit; }
+  .durs button.wide { grid-column: span 3; font-weight:600; }
+  .custom { display:flex; gap:8px; margin-top:10px; }
+  .custom input { flex:1; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-size:16px; }
+  .custom button { background:var(--blue); color:#fff; border:0; border-radius:10px; padding:0 18px; font-size:15px; font-family:inherit; }
+  .cancel { width:100%; margin-top:12px; background:none; border:0; color:var(--muted); font-size:15px; padding:10px; font-family:inherit; }
+  .empty { text-align:center; color:var(--muted); padding:40px 10px; line-height:1.7; }
+  .install { max-width:520px; margin:0 auto 14px; font-size:12.5px; color:var(--muted); text-align:center; line-height:1.6; }
+</style>
+</head>
+<body>
+<header>
+  <img src="./logo.png" alt="SpiderNet">
+  <span class="t">דריכה ונטרול</span>
+  <button id="logout" hidden>יציאה</button>
+</header>
+
+<form class="login" id="login" hidden>
+  <h2>כניסה</h2>
+  <p>דריכה ונטרול של מערכת האבטחה באתר שלך.</p>
+  <label for="email">אימייל</label>
+  <input id="email" type="email" autocomplete="username" required dir="ltr">
+  <label for="password">סיסמה</label>
+  <input id="password" type="password" autocomplete="current-password" required dir="ltr">
+  <button type="submit" id="loginBtn">כניסה</button>
+  <div class="err" id="loginErr"></div>
+</form>
+
+<main id="app" hidden>
+  <div id="sites"><div class="empty">טוען...</div></div>
+  <div class="install" id="installTip"></div>
+</main>
+
+<div class="sheet-bg" id="sheet" hidden>
+  <div class="sheet">
+    <h3 id="sheetTitle"></h3>
+    <p id="sheetSub"></p>
+    <div class="durs" id="durs"></div>
+    <div class="custom">
+      <input id="customMin" type="number" inputmode="numeric" min="1" max="10080" placeholder="מספר דקות אחר">
+      <button id="customOk">אישור</button>
+    </div>
+    <button class="cancel" id="sheetCancel">ביטול</button>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="./supabase-config.js"></script>
+<script>
+// דף הלקוח: דריכה / נטרול — מלאים או לזמן קצוב. אחרי הזמן המחשב באתר חוזר לבד למצב הרגיל.
+// הלקוח רואה רק את המכשירים שבתיקייה שלו (customer_sites), ומשנה רק דרך set_arming_override.
+const $ = id => document.getElementById(id);
+const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const cfg = SUPABASE_CONFIG;
+const client = supabase.createClient(cfg.url, cfg.anonKey);
+let sites = [], poll = null, tick = null, sheetCtx = null;
+
+const DURS = [[15, "15 דק'"], [30, "חצי שעה"], [60, "שעה"], [120, "שעתיים"], [240, "4 שעות"], [480, "8 שעות"]];
+const fmtTime = s => new Date(s * 1000).toLocaleTimeString("he-IL", {hour: "2-digit", minute: "2-digit"});
+function fmtLeft(sec) {
+  sec = Math.max(0, Math.round(sec));
+  const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60;
+  return h ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}` : `${m}:${String(s).padStart(2, "0")}`;
+}
+function activeOverride(a) {
+  const o = (a || {}).override;
+  if (!o || !["armed", "disarmed"].includes(o.state)) return null;
+  if (o.until != null && Date.now() / 1000 >= o.until) return null;
+  return o;
+}
+const online = s => s.last_seen && (Date.now() - new Date(s.last_seen).getTime()) < 3 * 60 * 1000;
+const BASE = {always: "דרוך 24 שעות", schedule: "לפי שעות שנקבעו", off: "שקט"};
+
+function siteHtml(s) {
+  const o = activeOverride(s.arming), st = s.state || {};
+  let armed, big, sub = "", pending = "";
+  if (o) {
+    armed = o.state === "armed";
+    big = armed ? "דרוך" : "מנוטרל";
+    sub = o.until != null
+      ? `${armed ? "יחזור למצב הרגיל" : "יידרך מחדש"} בעוד <span class="count" data-until="${o.until}">${fmtLeft(o.until - Date.now() / 1000)}</span> (ב-${fmtTime(o.until)})`
+      : (armed ? "דרוך עד שתנטרל" : "מנוטרל עד שתדרוך");
+    if (o.by) sub += `<br>ע"י ${esc(o.by)}`;
+    const confirmed = st.override && st.override.state === o.state && Math.abs((st.override.until || 0) - (o.until || 0)) < 2;
+    if (!confirmed && online(s)) pending = "⏳ שולח למערכת באתר...";
+  } else if (typeof st.armed === "boolean") {
+    armed = st.armed;
+    big = armed ? "דרוך" : "לא דרוך";
+    sub = "מצב רגיל — " + (BASE[(s.arming || {}).mode] || "");
+    if (st.override) pending = "⏳ חוזר למצב הרגיל...";
+  } else { armed = null; big = "לא ידוע"; sub = "המערכת באתר עוד לא דיווחה"; }
+  const cls = armed === null ? "unknown" : (armed ? "armed" : "disarmed");
+  return `<div class="site" data-id="${s.id}">
+    <div class="name">${esc(s.name)}</div>${s.folder ? `<div class="folder">${esc(s.folder)}</div>` : ""}
+    <div class="state"><div class="orb ${cls}">${armed === null ? "?" : (armed ? "🛡" : "🔓")}</div>
+      <div><div class="big">${big}</div><div class="sub">${sub}</div>${pending ? `<div class="pending">${pending}</div>` : ""}</div></div>
+    ${online(s) ? "" : `<div class="offline">⚠ המערכת באתר לא מחוברת כרגע — הפקודה תבוצע כשתתחבר</div>`}
+    <div class="actions">
+      <button class="btn-arm" onclick="ask('${s.id}', 'arm')">🛡 דריכה</button>
+      <button class="btn-dis" onclick="ask('${s.id}', 'disarm')">🔓 נטרול</button>
+    </div>
+    ${o ? `<button class="auto" onclick="send('${s.id}', 'auto', null)">↺ חזרה למצב הרגיל עכשיו</button>` : ""}
+    <div class="base">מצב רגיל (נקבע במוקד): ${esc(BASE[(s.arming || {}).mode] || "")}</div>
+  </div>`;
+}
+function render() {
+  $("sites").innerHTML = sites.length ? sites.map(siteHtml).join("")
+    : '<div class="empty">לא משויכים אליך אתרים.<br>פנה למוקד כדי לקבל גישה.</div>';
+}
+async function load() {
+  const { data, error } = await client.rpc("customer_sites");
+  if (error) { $("sites").innerHTML = `<div class="empty">שגיאת חיבור: ${esc(error.message)}</div>`; return; }
+  sites = data || [];
+  if (!sheetCtx) render();
+}
+
+function ask(id, action) {
+  const s = sites.find(x => x.id === id);
+  sheetCtx = {id, action};
+  $("sheetTitle").textContent = (action === "arm" ? "🛡 דריכה" : "🔓 נטרול") + " — " + s.name;
+  $("sheetSub").textContent = action === "arm" ? "לכמה זמן? אחרי הזמן המערכת חוזרת למצב הרגיל."
+                                               : "לכמה זמן? אחרי הזמן המערכת נדרכת מחדש לבד.";
+  $("durs").innerHTML = `<button class="wide" onclick="pick(null)">${action === "arm" ? "דריכה מלאה (עד שאנטרל)" : "נטרול מלא (עד שאדרוך)"}</button>`
+    + DURS.map(([m, t]) => `<button onclick="pick(${m})">${t}</button>`).join("");
+  $("customMin").value = "";
+  $("sheet").hidden = false;
+}
+function closeSheet() { $("sheet").hidden = true; sheetCtx = null; render(); }
+function pick(min) { const c = sheetCtx; closeSheet(); send(c.id, c.action, min); }
+$("customOk").onclick = () => {
+  const m = parseInt($("customMin").value, 10);
+  if (!(m >= 1 && m <= 10080)) return alert("מספר דקות בין 1 ל-10080");
+  pick(m);
+};
+$("sheetCancel").onclick = closeSheet;
+$("sheet").onclick = e => { if (e.target.id === "sheet") closeSheet(); };
+
+async function send(id, action, minutes) {
+  const { data, error } = await client.rpc("set_arming_override", {p_device: id, p_action: action, p_minutes: minutes});
+  if (error) return alert("הפעולה נכשלה: " + (error.message.includes("not allowed") ? "אין לך הרשאה לאתר הזה" : error.message));
+  const s = sites.find(x => x.id === id);
+  if (s) s.arming = data;
+  render();
+  setTimeout(load, 1500);
+}
+
+function startApp() {
+  $("login").hidden = true; $("app").hidden = false; $("logout").hidden = false;
+  load();
+  poll = setInterval(load, 5000);
+  // ספירה לאחור חיה
+  tick = setInterval(() => document.querySelectorAll("[data-until]").forEach(el => {
+    const left = el.dataset.until - Date.now() / 1000;
+    if (left <= 0) load(); else el.textContent = fmtLeft(left);
+  }), 1000);
+  const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone;
+  $("installTip").innerHTML = standalone ? "" :
+    (/iphone|ipad/i.test(navigator.userAgent)
+      ? "טיפ: לחץ על כפתור השיתוף ⬆ ואז \"הוסף למסך הבית\" — ייפתח כמו אפליקציה."
+      : "טיפ: בתפריט הדפדפן ⋮ בחר \"הוסף למסך הבית\" / \"התקן אפליקציה\" — ייפתח כמו אפליקציה.");
+}
+function showLogin() {
+  clearInterval(poll); clearInterval(tick); sites = [];
+  $("app").hidden = true; $("logout").hidden = true; $("login").hidden = false; $("password").value = "";
+}
+$("login").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  $("loginBtn").disabled = true; $("loginErr").textContent = "";
+  const { error } = await client.auth.signInWithPassword({email: $("email").value.trim(), password: $("password").value});
+  $("loginBtn").disabled = false;
+  if (error) { $("loginErr").textContent = "אימייל או סיסמה שגויים"; return; }
+  startApp();
+});
+$("logout").onclick = async () => { await client.auth.signOut(); showLogin(); };
+client.auth.getSession().then(({ data }) => data.session ? startApp() : showLogin());
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("./arm-sw.js").catch(() => {});
+</script>
+</body>
+</html>

@@ -114,6 +114,16 @@
   .arm.sch-on { background:#12261a; color:var(--green); }
   .arm.sch-off { background:#1d2733; color:#79c0ff; }
   .arm.off { background:#262626; color:var(--muted); }
+  .arm.ovr-dis { background:#3a2e12; color:#e3b341; }
+  .arm.ovr-arm { background:#12261a; color:var(--green); box-shadow: inset 0 0 0 1px var(--green); }
+  .arm-quick { border:1px solid var(--border); border-radius:10px; padding:10px; margin:10px 0; }
+  .arm-quick .row2 { display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-top:6px; }
+  .arm-quick select { background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:7px; padding:6px 8px; font-family:inherit; }
+  .arm-log { font-size:12.5px; color:var(--muted); line-height:1.7; margin-top:8px; max-height:140px; overflow-y:auto; }
+  .cust-list { font-size:13.5px; margin:10px 0; }
+  .cust-list div { display:flex; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid var(--border); }
+  .cust-list button { margin-inline-start:auto; }
+  .modal input.f { width:100%; background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:7px; padding:8px 10px; font-family:inherit; margin-top:6px; }
   .arm-modes { display:flex; gap:8px; flex-wrap:wrap; margin:10px 0; }
   .arm-modes label { flex:1; min-width:140px; border:1px solid var(--border); border-radius:8px; padding:8px 10px; cursor:pointer; font-size:13.5px; }
   .arm-modes label.sel { border-color:var(--accent); background:#16263d; }
@@ -191,6 +201,20 @@
   <h2 style="color:var(--text); margin-top:0" id="armTitle">דריכה</h2>
   <div style="font-size:13px; color:var(--muted)">מתי המכשיר שולח התראות למוקד. כשלא דרוך — הזיהויים נשמרים רק ביומן של המחשב.
     התראות על תקינות מצלמה (ניתוק / הזזה / חסימה) נשלחות תמיד.</div>
+  <div class="arm-quick">
+    <b style="font-size:13.5px">דריכה / נטרול ידני</b> <span id="armOvr" style="font-size:12.5px"></span>
+    <div class="row2">
+      <select id="armQuickMin">
+        <option value="">ללא הגבלת זמן</option><option value="15">15 דק'</option><option value="30">חצי שעה</option>
+        <option value="60">שעה</option><option value="120">שעתיים</option><option value="240">4 שעות</option><option value="480">8 שעות</option>
+      </select>
+      <button class="btn" type="button" style="background:#238636" onclick="armQuick('arm')">🛡 דרוך</button>
+      <button class="btn" type="button" style="background:#9e6a03" onclick="armQuick('disarm')">🔓 נטרל</button>
+      <button class="btn ghost" type="button" id="armAuto" onclick="armQuick('auto')">↺ חזרה למצב הרגיל</button>
+    </div>
+    <div class="arm-log" id="armLog"></div>
+  </div>
+  <div style="font-size:13.5px; font-weight:600; margin-top:12px">מצב רגיל</div>
   <div class="arm-modes" id="armModes">
     <label data-m="always"><input type="radio" name="armMode" value="always"> 🛡 דרוך 24 שעות<small>כל ההתראות, כל הזמן</small></label>
     <label data-m="schedule"><input type="radio" name="armMode" value="schedule"> 🌙 לפי שעות<small>רק בשעות שמוגדרות למטה</small></label>
@@ -210,6 +234,22 @@
     <button class="btn ghost" id="armCancel">ביטול</button>
   </div>
   <div style="font-size:12px; color:var(--muted); margin-top:8px">ההגדרה מגיעה למחשב בדיווח הבא שלו (עד דקה).</div>
+</div></div>
+<div class="modal" id="custModal" hidden><div class="box" style="width:min(520px, 96vw)">
+  <h2 style="color:var(--text); margin-top:0" id="custTitle">משתמשי לקוח</h2>
+  <div style="font-size:13px; color:var(--muted); line-height:1.6">משתמשי לקוח נכנסים לדף הדריכה ורואים רק את המכשירים בתיקייה הזו
+    (כולל תתי-תיקיות) — דריכה ונטרול בלבד, בלי אירועים ובלי הגדרות.</div>
+  <div class="cust-list" id="custList"></div>
+  <div style="font-size:13px; margin-top:10px"><b>הוספת משתמש</b></div>
+  <div style="font-size:12px; color:var(--muted); line-height:1.6">1. ב-Supabase → Authentication → Users → Add user: אימייל + סיסמה, לסמן Auto Confirm.
+    <br>2. כאן: האימייל ושם (לא חובה) → הוסף.</div>
+  <input class="f" id="custEmail" type="email" dir="ltr" placeholder="email@example.com">
+  <input class="f" id="custName" placeholder="שם (למשל: משה — בעל העסק)">
+  <div style="display:flex; gap:8px; margin-top:10px">
+    <button class="btn" id="custAdd" style="flex:1">הוסף</button>
+    <button class="btn ghost" id="custClose">סגור</button>
+  </div>
+  <div style="font-size:12px; color:var(--muted); margin-top:10px">קישור לדף הדריכה ללקוח: <span dir="ltr" id="custLink"></span></div>
 </div></div>
 <div class="modal" id="faModal" hidden><div class="box" style="width:min(760px, 96vw)">
   <h2 style="color:var(--text); margin-top:0">סימון התראת שווא</h2>
@@ -282,8 +322,21 @@ function render(rows) {
 // נשמר ב-devices.arming; המחשב מקבל אותו בתשובה להארטביט ומחליט לפי השעון שלו.
 // המצב "עכשיו" מגיע מהמחשב (info.arming.armed) — לפי אזור הזמן של המכשיר, לא של הדפדפן.
 const ARM_DAYS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
+function activeOvr(a) {
+  const o = (a || {}).override;
+  if (!o || !["armed", "disarmed"].includes(o.state)) return null;
+  return o.until != null && Date.now() / 1000 >= o.until ? null : o;
+}
+const hhmm = s => new Date(s * 1000).toLocaleTimeString("he-IL", {hour: "2-digit", minute: "2-digit"});
+function ovrText(o) {
+  return (o.state === "armed" ? "דרוך ידנית" : "מנוטרל ידנית") + (o.by ? ` ע"י ${o.by}` : "")
+    + (o.until != null ? ` עד ${hhmm(o.until)}` : " ללא הגבלת זמן");
+}
 function armBadge(d) {
-  const a = d.arming || {mode: "always"}, rep = (d.info || {}).arming;
+  const a = d.arming || {mode: "always"}, rep = (d.info || {}).arming, o = activeOvr(a);
+  if (o) return o.state === "armed"
+    ? `<span class="arm ovr-arm" title="${esc(ovrText(o))}">🛡 דרוך ידנית${o.until != null ? " עד " + hhmm(o.until) : ""}</span>`
+    : `<span class="arm ovr-dis" title="${esc(ovrText(o))}">🔓 מנוטרל${o.until != null ? " עד " + hhmm(o.until) : ""}</span>`;
   const live = devState(d) === "on" && rep && rep.mode === a.mode;   // המחשב כבר קיבל את ההגדרה הנוכחית
   if (a.mode === "off") return `<span class="arm off" title="שקט — אין התראות למוקד">🔕 שקט</span>`;
   if (a.mode === "schedule") {
@@ -304,8 +357,27 @@ function openArming(id) {
   const a = JSON.parse(JSON.stringify(armDev.arming || {mode: "always"}));
   armDraft = {mode: a.mode || "always", days: Object.assign(armDefaults(), a.days || {})};
   $("armTitle").textContent = "דריכה — " + armDev.name;
-  renderArming();
+  renderArming(); renderArmOvr(); loadArmLog();
   $("armModal").hidden = false;
+}
+function renderArmOvr() {
+  const o = activeOvr(armDev.arming);
+  $("armOvr").innerHTML = o ? `— <span style="color:#e3b341">${esc(ovrText(o))}</span>` : "— אין (פועל לפי המצב הרגיל)";
+  $("armAuto").hidden = !o;
+}
+const ARM_ACT = {arm: "דריכה", disarm: "נטרול", auto: "חזרה למצב הרגיל"};
+async function loadArmLog() {
+  const { data } = await client.from("arming_log").select("*").eq("device_id", armDev.id).order("at", {ascending: false}).limit(15);
+  $("armLog").innerHTML = (data || []).length ? (data || []).map(r =>
+    `${new Date(r.at).toLocaleString("he-IL")} — ${ARM_ACT[r.action] || r.action}${r.minutes ? ` ל-${r.minutes} דק'` : (r.action === "auto" ? "" : " מלאה")}
+     • ${esc(r.who || "")} (${r.source === "customer" ? "לקוח" : "מוקד"})`).join("<br>") : "אין פעולות ידניות עדיין";
+}
+async function armQuick(action) {
+  const min = $("armQuickMin").value ? parseInt($("armQuickMin").value, 10) : null;
+  const { data, error } = await client.rpc("set_arming_override", {p_device: armDev.id, p_action: action, p_minutes: action === "auto" ? null : min});
+  if (error) return alert("הפעולה נכשלה: " + error.message);
+  armDev.arming = data; const d = devices.find(x => x.id === armDev.id); if (d) d.arming = data;
+  renderArmOvr(); loadArmLog(); renderTree();
 }
 function renderArming() {
   document.querySelectorAll("#armModes label").forEach(l => {
@@ -346,9 +418,46 @@ $("armSave").onclick = async () => {
   const value = armDraft.mode === "schedule" ? {mode: "schedule", days} : {mode: armDraft.mode};
   if (armDraft.mode === "schedule" && !Object.values(days).some(w => w.on))
     return alert("לא נבחר אף יום — המכשיר לא יהיה דרוך אף פעם. בחר ימים או בחר \"שקט\".");
-  await db(client.from("devices").update({arming: value}).eq("id", armDev.id));
+  const { error } = await client.rpc("staff_set_arming_base", {p_device: armDev.id, p_base: value});
+  if (error) return alert("השמירה נכשלה: " + error.message);
   $("armModal").hidden = true;
+  loadTree();
 };
+
+// ================= משתמשי לקוח (דף הדריכה) =================
+let custNode = null;
+async function openCustomers(nodeId) {
+  custNode = nodes.find(x => x.id === nodeId);
+  $("custTitle").textContent = "משתמשי לקוח — " + custNode.name;
+  $("custLink").textContent = new URL("arm.html", location.href).href;
+  $("custEmail").value = ""; $("custName").value = "";
+  $("custModal").hidden = false;
+  loadCustomers();
+}
+async function loadCustomers() {
+  const { data, error } = await client.from("customer_users").select("*").eq("node_id", custNode.id).order("created_at");
+  if (error) { $("custList").textContent = error.message; return; }
+  $("custList").innerHTML = (data || []).length ? data.map(u => `<div><span dir="ltr">${esc(u.email)}</span>
+      <span style="color:var(--muted)">${esc(u.name || "")}</span>
+      <button class="ico del" onclick="delCustomer('${u.user_id}')">הסר</button></div>`).join("")
+    : '<span style="color:var(--muted)">אין משתמשים עדיין</span>';
+}
+async function delCustomer(uid) {
+  if (!confirm("להסיר את הגישה של המשתמש לתיקייה הזו?")) return;
+  await client.from("customer_users").delete().eq("user_id", uid).eq("node_id", custNode.id);
+  loadCustomers();
+}
+$("custAdd").onclick = async () => {
+  const email = $("custEmail").value.trim();
+  if (!email) return;
+  const { error } = await client.rpc("staff_link_customer", {p_email: email, p_node: custNode.id, p_name: $("custName").value.trim() || null});
+  if (error) return alert(error.message.includes("user not found") ? "אין משתמש כזה — צור אותו קודם ב-Supabase (Authentication → Add user)"
+    : error.message.includes("user is staff") ? "זה משתמש של צוות המוקד" : "שגיאה: " + error.message);
+  $("custEmail").value = ""; $("custName").value = "";
+  loadCustomers();
+};
+$("custClose").onclick = () => $("custModal").hidden = true;
+$("custModal").onclick = e => { if (e.target.id === "custModal") $("custModal").hidden = true; };
 
 // ================= התראות שווא =================
 // המוקדן מסמן כאן → המכשיר מושך את הסימון (fa_applied) ויוצר אזור התעלמות. סימון במחשב המקומי עולה לכאן.
@@ -585,6 +694,7 @@ function folderHtml(n) {
         <button class="ico" onclick="addDevice('${n.id}')">+ מכשיר</button>
         <button class="ico" onclick="addFolder('${n.id}')">+ תיקייה</button>
         <button class="ico" onclick="renameFolder('${n.id}')">שם</button>
+        <button class="ico" onclick="openCustomers('${n.id}')">משתמשי לקוח</button>
         <button class="ico del" onclick="delFolder('${n.id}')">מחק</button>
       </span></div>
     ${closed ? "" : `<div class="kids">${kids.map(folderHtml).join("")}${devs.map(deviceRow).join("")}</div>`}</div>`;
