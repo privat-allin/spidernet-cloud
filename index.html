@@ -86,6 +86,20 @@
   .modal textarea { width:100%; margin:10px 0; background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:7px;
                     padding:8px; font-family:monospace; font-size:12px; direction:ltr; }
   .modal ol { font-size:13px; line-height:1.8; padding-inline-start:20px; color:var(--muted); }
+  /* תמונת אירוע מוגדלת */
+  .ev img { cursor: zoom-in; }
+  #lightbox { position:fixed; inset:0; background:rgba(0,0,0,.9); display:flex; flex-direction:column; align-items:center;
+              justify-content:center; z-index:60; padding:16px; }
+  #lightbox img { max-width:94vw; max-height:78vh; border-radius:8px; box-shadow:0 8px 40px rgba(0,0,0,.6); cursor:zoom-out; }
+  #lightbox .cap { margin-top:12px; text-align:center; font-size:14px; line-height:1.6; max-width:94vw; }
+  #lightbox .cap .t { color:var(--muted); font-size:12.5px; }
+  #lightbox .nav { position:absolute; top:50%; transform:translateY(-50%); background:rgba(255,255,255,.1); border:none;
+                   color:#fff; font-size:30px; width:48px; height:64px; border-radius:10px; cursor:pointer; }
+  #lightbox .nav:hover { background:rgba(255,255,255,.2); }
+  #lightbox .nav:disabled { opacity:.15; cursor:default; }
+  #lightbox .prev { right:16px; } #lightbox .next { left:16px; }
+  #lightbox .x { position:absolute; top:14px; left:16px; background:none; border:1px solid #555; color:#ddd;
+                 border-radius:8px; padding:4px 12px; cursor:pointer; font-size:14px; }
 </style>
 </head>
 <body>
@@ -122,6 +136,13 @@
     <div id="feed"><div class="empty">ממתין לאירועים...</div></div>
   </section>
 </main>
+<div id="lightbox" hidden>
+  <button class="x" id="lbClose">סגור ✕</button>
+  <button class="nav prev" id="lbPrev" title="האירוע הקודם (חדש יותר)">›</button>
+  <img id="lbImg" alt="תמונת האירוע">
+  <button class="nav next" id="lbNext" title="האירוע הבא (ישן יותר)">‹</button>
+  <div class="cap" id="lbCap"></div>
+</div>
 <div class="modal" id="pairModal" hidden><div class="box">
   <b id="pairTitle">קוד חיבור</b>
   <textarea id="pairCode" rows="5" readonly></textarea>
@@ -154,7 +175,7 @@ function render(rows) {
   if (!rows.length) { feed.innerHTML = `<div class="empty">${sel.type === "all" ? "אין אירועים עדיין" : "אין אירועים לבחירה הזאת"}</div>`; return; }
   feed.innerHTML = rows.map(e => {
     const src = signed.get(e.image_path);
-    const img = src ? `<img src="${esc(src)}">` : "";
+    const img = src ? `<img src="${esc(src)}" onclick="openEvent('${e.id}')" title="לחץ להגדלה">` : "";
     const act = {alert: "התראה", log: "רישום", clip: "קליפ"}[e.action] || e.action;
     const kind = e.kind === "camera" ? `<span class="badge cam">תקינות מצלמה</span>` : `<span class="badge">${esc(act)}</span>`;
     const evDev = devices.find(x => x.id === e.device_id);
@@ -169,6 +190,42 @@ function render(rows) {
       <span class="site">${site}חוק: ${esc(e.rule || "-")}</span></div></div>`;
   }).join("");
 }
+
+// ================= תמונת אירוע מוגדלת =================
+let lbIdx = -1;
+const lbRows = () => rows.filter(e => signed.get(e.image_path));   // רק אירועים עם תמונה
+function openEvent(id) {
+  lbIdx = lbRows().findIndex(e => String(e.id) === String(id));
+  if (lbIdx < 0) return;
+  showLb();
+  $("lightbox").hidden = false;
+}
+function showLb() {
+  const list = lbRows(), e = list[lbIdx];
+  if (!e) return closeLb();
+  $("lbImg").src = signed.get(e.image_path);
+  const dev = devices.find(d => d.id === e.device_id);
+  const cam = e.channel && dev ? camName(dev, e.channel) : e.camera;
+  $("lbCap").innerHTML = `<b>${esc(e.message)}</b><br>
+    <span class="t">${new Date((e.ts || 0) * 1000).toLocaleString("he-IL")}${dev ? " • " + esc(dev.name) : ""}${cam ? " • " + esc(cam) : ""}
+    ${e.rule ? " • חוק: " + esc(e.rule) : ""} • ${lbIdx + 1} מתוך ${list.length}</span>`;
+  $("lbPrev").disabled = lbIdx === 0;
+  $("lbNext").disabled = lbIdx === list.length - 1;
+}
+function closeLb() { $("lightbox").hidden = true; $("lbImg").removeAttribute("src"); lbIdx = -1; }
+function lbStep(d) { const n = lbIdx + d; if (n >= 0 && n < lbRows().length) { lbIdx = n; showLb(); } }
+$("lbClose").onclick = closeLb;
+$("lbImg").onclick = closeLb;
+$("lbPrev").onclick = () => lbStep(-1);
+$("lbNext").onclick = () => lbStep(1);
+$("lightbox").onclick = e => { if (e.target.id === "lightbox") closeLb(); };
+document.addEventListener("keydown", e => {
+  if ($("lightbox").hidden) return;
+  if (e.key === "Escape") closeLb();
+  // בעברית: חץ ימינה = הקודם (חדש יותר), חץ שמאלה = הבא (ישן יותר)
+  if (e.key === "ArrowRight") lbStep(-1);
+  if (e.key === "ArrowLeft") lbStep(1);
+});
 
 // ================= עץ מכשירים =================
 const ICON_FOLDER = `<svg class="ic" viewBox="0 0 24 24"><defs><linearGradient id="gf" x1="0" y1="0" x2="0" y2="1">
