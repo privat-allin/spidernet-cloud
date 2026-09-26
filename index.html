@@ -108,6 +108,21 @@
   #lightbox .nav:hover { background:rgba(255,255,255,.2); }
   #lightbox .nav:disabled { opacity:.15; cursor:default; }
   #lightbox .prev { right:16px; } #lightbox .next { left:16px; }
+  /* ---- דריכה ---- */
+  .arm { font-size:11.5px; border-radius:10px; padding:1px 8px; white-space:nowrap; flex:none; }
+  .arm.on { background:#12261a; color:var(--green); }
+  .arm.sch-on { background:#12261a; color:var(--green); }
+  .arm.sch-off { background:#1d2733; color:#79c0ff; }
+  .arm.off { background:#262626; color:var(--muted); }
+  .arm-modes { display:flex; gap:8px; flex-wrap:wrap; margin:10px 0; }
+  .arm-modes label { flex:1; min-width:140px; border:1px solid var(--border); border-radius:8px; padding:8px 10px; cursor:pointer; font-size:13.5px; }
+  .arm-modes label.sel { border-color:var(--accent); background:#16263d; }
+  .arm-modes small { display:block; color:var(--muted); font-size:11.5px; margin-top:2px; }
+  .arm-days { width:100%; border-collapse:collapse; font-size:13.5px; }
+  .arm-days td { padding:5px 4px; border-bottom:1px solid var(--border); }
+  .arm-days input[type=time] { background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:3px 6px; font-family:inherit; }
+  .arm-days .dis { opacity:.35; }
+  .arm-presets { display:flex; gap:6px; flex-wrap:wrap; margin:8px 0; }
   /* ---- התראות שווא ---- */
   .fa-btn { background:none; border:1px solid var(--border); color:var(--muted); border-radius:6px; padding:2px 9px;
             font-size:12px; cursor:pointer; font-family:inherit; margin-top:4px; }
@@ -172,6 +187,30 @@
     <div id="feed"><div class="empty">ממתין לאירועים...</div></div>
   </section>
 </main>
+<div class="modal" id="armModal" hidden><div class="box" style="width:min(620px, 96vw); max-height:92vh; overflow-y:auto">
+  <h2 style="color:var(--text); margin-top:0" id="armTitle">דריכה</h2>
+  <div style="font-size:13px; color:var(--muted)">מתי המכשיר שולח התראות למוקד. כשלא דרוך — הזיהויים נשמרים רק ביומן של המחשב.
+    התראות על תקינות מצלמה (ניתוק / הזזה / חסימה) נשלחות תמיד.</div>
+  <div class="arm-modes" id="armModes">
+    <label data-m="always"><input type="radio" name="armMode" value="always"> 🛡 דרוך 24 שעות<small>כל ההתראות, כל הזמן</small></label>
+    <label data-m="schedule"><input type="radio" name="armMode" value="schedule"> 🌙 לפי שעות<small>רק בשעות שמוגדרות למטה</small></label>
+    <label data-m="off"><input type="radio" name="armMode" value="off"> 🔕 שקט<small>אין התראות למוקד</small></label>
+  </div>
+  <div id="armSched">
+    <div class="arm-presets">
+      <button class="btn ghost" type="button" onclick="armPreset('night')">ערב–בוקר כל יום (18:00–06:00)</button>
+      <button class="btn ghost" type="button" onclick="armPreset('weekend')">+ סוף שבוע מלא (שישי 14:00 – ראשון 06:00)</button>
+    </div>
+    <table class="arm-days" id="armDays"></table>
+    <div style="font-size:12px; color:var(--muted); margin-top:6px">שעת סיום מוקדמת משעת ההתחלה = ממשיך עד הבוקר של היום הבא.
+      "24 שעות" = דרוך כל היום (ממשיך לתוך היום הבא עד אותה שעה).</div>
+  </div>
+  <div style="display:flex; gap:8px; margin-top:14px">
+    <button class="btn" id="armSave" style="flex:1">שמור</button>
+    <button class="btn ghost" id="armCancel">ביטול</button>
+  </div>
+  <div style="font-size:12px; color:var(--muted); margin-top:8px">ההגדרה מגיעה למחשב בדיווח הבא שלו (עד דקה).</div>
+</div></div>
 <div class="modal" id="faModal" hidden><div class="box" style="width:min(760px, 96vw)">
   <h2 style="color:var(--text); margin-top:0">סימון התראת שווא</h2>
   <div style="font-size:13px; color:var(--muted); margin-bottom:10px">לחץ על התיבה של הזיהוי השגוי (אפשר כמה).
@@ -238,6 +277,78 @@ function render(rows) {
       <span class="site">${site}חוק: ${esc(e.rule || "-")}</span>${faHtml(e)}</div></div>`;
   }).join("");
 }
+
+// ================= דריכה =================
+// נשמר ב-devices.arming; המחשב מקבל אותו בתשובה להארטביט ומחליט לפי השעון שלו.
+// המצב "עכשיו" מגיע מהמחשב (info.arming.armed) — לפי אזור הזמן של המכשיר, לא של הדפדפן.
+const ARM_DAYS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
+function armBadge(d) {
+  const a = d.arming || {mode: "always"}, rep = (d.info || {}).arming;
+  const live = devState(d) === "on" && rep && rep.mode === a.mode;   // המחשב כבר קיבל את ההגדרה הנוכחית
+  if (a.mode === "off") return `<span class="arm off" title="שקט — אין התראות למוקד">🔕 שקט</span>`;
+  if (a.mode === "schedule") {
+    if (!live) return `<span class="arm sch-off" title="${esc(rep ? rep.text : "")}">🌙 לפי שעות</span>`;
+    return rep.armed ? `<span class="arm sch-on" title="${esc(rep.text)}">🌙 דרוך עכשיו</span>`
+                     : `<span class="arm sch-off" title="${esc(rep.text)}">🌙 לא דרוך עכשיו</span>`;
+  }
+  return `<span class="arm on" title="דרוך 24 שעות">🛡 דרוך</span>`;
+}
+let armDev = null, armDraft = null;
+function armDefaults() {
+  const days = {};
+  for (let i = 0; i < 7; i++) days[i] = {on: true, from: "18:00", to: "06:00"};
+  return days;
+}
+function openArming(id) {
+  armDev = devices.find(x => x.id === id);
+  const a = JSON.parse(JSON.stringify(armDev.arming || {mode: "always"}));
+  armDraft = {mode: a.mode || "always", days: Object.assign(armDefaults(), a.days || {})};
+  $("armTitle").textContent = "דריכה — " + armDev.name;
+  renderArming();
+  $("armModal").hidden = false;
+}
+function renderArming() {
+  document.querySelectorAll("#armModes label").forEach(l => {
+    const on = l.dataset.m === armDraft.mode;
+    l.classList.toggle("sel", on); l.querySelector("input").checked = on;
+  });
+  $("armSched").style.display = armDraft.mode === "schedule" ? "" : "none";
+  $("armDays").innerHTML = ARM_DAYS.map((name, i) => {
+    const w = armDraft.days[i], full = w.from === w.to;
+    return `<tr><td><label><input type="checkbox" ${w.on ? "checked" : ""} onchange="armSet(${i}, 'on', this.checked)"> ${name}</label></td>
+      <td class="${w.on ? "" : "dis"}"><input type="time" value="${w.from}" ${w.on ? "" : "disabled"} onchange="armSet(${i}, 'from', this.value)">
+        עד <input type="time" value="${w.to}" ${w.on && !full ? "" : "disabled"} onchange="armSet(${i}, 'to', this.value)"></td>
+      <td class="${w.on ? "" : "dis"}"><label><input type="checkbox" ${full ? "checked" : ""} ${w.on ? "" : "disabled"}
+        onchange="armSet(${i}, 'full', this.checked)"> 24 שעות</label></td></tr>`;
+  }).join("");
+}
+function armSet(i, k, v) {
+  const w = armDraft.days[i];
+  if (k === "full") w.to = v ? w.from : (w.from === "06:00" ? "18:00" : "06:00");
+  else if (k === "from" && w.from === w.to) { w.from = v; w.to = v; }     // 24 שעות — נשאר 24 שעות
+  else w[k] = v;
+  renderArming();
+}
+function armPreset(p) {
+  if (p === "night") armDraft.days = armDefaults();
+  if (p === "weekend") {
+    armDraft.days[5] = {on: true, from: "14:00", to: "14:00"};   // שישי 14:00 → 24 שעות עד שבת 14:00
+    armDraft.days[6] = {on: true, from: "14:00", to: "06:00"};   // שבת 14:00 → ראשון 06:00
+  }
+  renderArming();
+}
+document.querySelectorAll("#armModes input").forEach(r => r.onchange = () => { armDraft.mode = r.value; renderArming(); });
+$("armCancel").onclick = () => $("armModal").hidden = true;
+$("armModal").onclick = e => { if (e.target.id === "armModal") $("armModal").hidden = true; };
+$("armSave").onclick = async () => {
+  const days = {};
+  for (let i = 0; i < 7; i++) days[i] = armDraft.days[i];
+  const value = armDraft.mode === "schedule" ? {mode: "schedule", days} : {mode: armDraft.mode};
+  if (armDraft.mode === "schedule" && !Object.values(days).some(w => w.on))
+    return alert("לא נבחר אף יום — המכשיר לא יהיה דרוך אף פעם. בחר ימים או בחר \"שקט\".");
+  await db(client.from("devices").update({arming: value}).eq("id", armDev.id));
+  $("armModal").hidden = true;
+};
 
 // ================= התראות שווא =================
 // המוקדן מסמן כאן → המכשיר מושך את הסימון (fa_applied) ויוצר אזור התעלמות. סימון במחשב המקומי עולה לכאן.
@@ -444,11 +555,13 @@ function deviceRow(d) {
     <span class="txt"><span class="name">${ICON_DEVICE}${esc(d.name)}</span>
       <span class="meta">${label} • ${agoText(d.last_seen)}${camsTxt} • כל ${d.heartbeat_sec} שנ'</span></span>
     ${issues ? `<span class="warn" title="מצלמות מנותקות או חסרות">⚠ ${issues}</span>` : ""}
+    ${armBadge(d)}
     ${remoteUrl(d) ? `<button class="open-ui" title="פתיחת ממשק המכשיר בטאב חדש (דרך NetBird)"
         onclick="event.stopPropagation(); window.open('${remoteUrl(d)}', '_blank', 'noopener')">פתח ממשק</button>` : ""}
     ${extra ? `<span class="cnt" title="מצלמות שקיימות במחשב ולא הוגדרו במוקד">+${extra}</span>` : ""}
     <button class="menu-btn ${menuOpen === key ? "on" : ""}" title="פעולות" onclick="event.stopPropagation(); toggleMenu('${key}')">⋯</button>
     <span class="acts" onclick="event.stopPropagation()">
+      <button class="ico" onclick="openArming('${d.id}')">דריכה</button>
       <button class="ico" onclick="setCamCount('${d.id}')">מספר מצלמות</button>
       <button class="ico" onclick="showPair('${d.id}')">קוד חיבור</button>
       <button class="ico" onclick="renameDevice('${d.id}')">שם</button>
