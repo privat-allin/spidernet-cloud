@@ -120,6 +120,14 @@
   .arm-quick .row2 { display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-top:6px; }
   .arm-quick select { background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:7px; padding:6px 8px; font-family:inherit; }
   .arm-log { font-size:12.5px; color:var(--muted); line-height:1.7; margin-top:8px; max-height:140px; overflow-y:auto; }
+  .upd { font-size:11.5px; border-radius:10px; padding:1px 8px; white-space:nowrap; flex:none; }
+  .upd.avail { background:#1d2733; color:#79c0ff; }
+  .upd.busy { background:#1d2733; color:#79c0ff; animation:p 1.4s infinite; }
+  .upd.fail { background:#3d1d20; color:var(--red); }
+  .upd-ch { display:flex; gap:8px; flex-wrap:wrap; margin:10px 0; }
+  .upd-ch label { flex:1; min-width:200px; border:1px solid var(--border); border-radius:8px; padding:8px 10px; cursor:pointer; font-size:13.5px; }
+  .upd-ch label.sel { border-color:var(--accent); background:#16263d; }
+  .upd-ch small { display:block; color:var(--muted); font-size:12px; margin-top:3px; line-height:1.5; }
   .log-tabs { display:flex; gap:6px; flex-wrap:wrap; margin:10px 0; }
   .log-tabs button { background:none; border:1px solid var(--border); color:var(--muted); border-radius:8px; padding:6px 12px;
                      font-size:13px; cursor:pointer; font-family:inherit; }
@@ -242,6 +250,18 @@
     <button class="btn ghost" id="armCancel">ביטול</button>
   </div>
   <div style="font-size:12px; color:var(--muted); margin-top:8px">ההגדרה מגיעה למחשב בדיווח הבא שלו (עד דקה).</div>
+</div></div>
+<div class="modal" id="updModal" hidden><div class="box" style="width:min(560px, 96vw)">
+  <h2 style="color:var(--text); margin-top:0" id="updTitle">עדכון גרסה</h2>
+  <div id="updCur" style="font-size:13.5px; line-height:1.7"></div>
+  <div class="upd-ch" id="updCh"></div>
+  <div id="updStatus" style="font-size:13px; min-height:20px"></div>
+  <div style="display:flex; gap:8px; margin-top:10px">
+    <button class="btn" id="updGo" style="flex:1">עדכן עכשיו</button>
+    <button class="btn ghost" id="updClose">סגור</button>
+  </div>
+  <div style="font-size:12px; color:var(--muted); margin-top:8px; line-height:1.6">המחשב מקבל את הבקשה בדיווח הבא שלו (עד דקה), מוריד רק את מה
+    שהשתנה, מתקין ועולה מחדש (כחצי דקה בלי זיהוי). ההגדרות, המצלמות והאזורים נשמרים. אם משהו נכשל — חוזר לגרסה הקודמת.</div>
 </div></div>
 <div class="modal" id="logModal" hidden><div class="box" style="width:min(860px, 96vw); max-height:90vh; display:flex; flex-direction:column">
   <div style="display:flex; align-items:center; gap:10px">
@@ -437,6 +457,70 @@ $("armSave").onclick = async () => {
   $("armModal").hidden = true;
   loadTree();
 };
+
+// ================= גרסאות ועדכון מהמוקד =================
+// הגרסה האחרונה בכל ערוץ נקראת מה-bucket הפרטי releases (צוות מוקד בלבד). הבקשה נכתבת ל-devices.update_request,
+// המכשיר מקבל אותה בהארטביט ומדווח את מצב העדכון ב-info.update (downloading / installing / done / failed).
+let latest = {};
+async function loadLatest() {
+  for (const ch of ["stable", "beta"]) {
+    const { data } = await client.storage.from("releases").download(`channels/${ch}.json`);
+    latest[ch] = data ? JSON.parse(await data.text()) : null;
+  }
+  renderTree();
+}
+const devChannel = d => ((d.info || {}).channel === "beta" ? "beta" : "stable");
+function updBadge(d) {
+  const i = d.info || {}, u = i.update || {}, req = d.update_request;
+  if (devState(d) !== "on" || !i.ver || i.ver === "dev") return "";
+  if (req && u.id === req.id && (u.state === "downloading" || u.state === "installing"))
+    return `<span class="upd busy" title="${esc(u.progress || "")}">⏳ ${u.state === "installing" ? "מתקין" : "מוריד"} עדכון</span>`;
+  if (req && u.id === req.id && u.state === "failed") return `<span class="upd fail" title="${esc(u.error || "")}">⚠ עדכון נכשל</span>`;
+  if (req && req.version && req.version !== i.ver && u.id !== req.id) return `<span class="upd busy">⏳ ממתין לעדכון</span>`;
+  const l = latest[devChannel(d)];
+  return l && l.version && l.version !== i.ver && l.version > i.ver ? `<span class="upd avail" title="גרסה ${esc(l.version)} זמינה">⬆ עדכון זמין</span>` : "";
+}
+let updDev = null, updPick = "stable";
+function openUpdate(id) {
+  updDev = devices.find(x => x.id === id);
+  updPick = devChannel(updDev);
+  $("updTitle").textContent = "עדכון גרסה — " + updDev.name;
+  renderUpdate();
+  $("updModal").hidden = false;
+  loadLatest();
+}
+function renderUpdate() {
+  if (!updDev || $("updModal").hidden && !updDev) return;
+  const d = devices.find(x => x.id === updDev.id) || updDev, i = d.info || {}, u = i.update || {}, req = d.update_request;
+  $("updCur").innerHTML = `גרסה נוכחית: <b>${esc(i.ver || "לא ידוע")}</b>${i.channel === "beta" ? " (ערוץ בדיקות)" : i.ver ? " (ערוץ יציב)" : ""}
+    ${devState(d) !== "on" ? '<br><span style="color:var(--red)">המחשב לא מחובר — הבקשה תבוצע כשיתחבר</span>' : ""}`;
+  $("updCh").innerHTML = ["stable", "beta"].map(ch => {
+    const l = latest[ch];
+    return `<label class="${updPick === ch ? "sel" : ""}" onclick="updPick='${ch}'; renderUpdate()">
+      <input type="radio" name="updch" ${updPick === ch ? "checked" : ""}> ${ch === "stable" ? "יציב (ללקוחות)" : "בדיקות (מעבדה)"}
+      <small>${l ? `גרסה ${esc(l.version)} • ${esc(l.date || "")}${l.notes ? "<br>" + esc(l.notes) : ""}` : "אין גרסה בערוץ הזה"}</small></label>`;
+  }).join("");
+  let st = "";
+  if (req && u.id === req.id) st = {downloading: `⏳ מוריד... ${esc(u.progress || "")}`, installing: "⏳ מתקין ומפעיל מחדש...",
+      done: `✅ עודכן לגרסה ${esc(u.version || "")}`, failed: `<span style="color:var(--red)">⚠ נכשל: ${esc(u.error || "")}</span>`}[u.state] || "";
+  else if (req && req.version !== i.ver) st = `⏳ בקשה לגרסה ${esc(req.version)} נשלחה ${req.by ? "ע\"י " + esc(req.by) : ""} — ממתין למחשב`;
+  $("updStatus").innerHTML = st;
+  const l = latest[updPick];
+  $("updGo").disabled = !l || (l.version === i.ver);
+  $("updGo").textContent = !l ? "אין גרסה" : l.version === i.ver ? "כבר מעודכן" : `עדכן לגרסה ${l.version}`;
+}
+$("updGo").onclick = async () => {
+  const l = latest[updPick];
+  if (!l) return;
+  if (updPick === "beta" && !confirm("להעביר את המכשיר לערוץ בדיקות? מומלץ רק למחשבי מעבדה.")) return;
+  const reqv = {id: crypto.randomUUID(), channel: updPick, version: l.version, by: me, at: new Date().toISOString()};
+  const { error } = await client.from("devices").update({update_request: reqv}).eq("id", updDev.id);
+  if (error) return alert("שגיאה: " + error.message);
+  updDev.update_request = reqv; const d = devices.find(x => x.id === updDev.id); if (d) d.update_request = reqv;
+  renderUpdate(); renderTree();
+};
+$("updClose").onclick = () => { $("updModal").hidden = true; };
+$("updModal").onclick = e => { if (e.target.id === "updModal") $("updModal").hidden = true; };
 
 // ================= יומנים =================
 // מקום אחד מסודר לכל היומנים: דריכה/נטרול (arming_log), תקינות מצלמות (אירועי kind=camera), סימוני שווא.
@@ -733,6 +817,7 @@ function deviceRow(d) {
       <span class="meta">${label} • ${agoText(d.last_seen)}${camsTxt} • אות חיים כל ${d.heartbeat_sec} שנ'${i.ver ? ` • גרסה ${esc(i.ver)}${i.channel === "beta" ? " (בדיקות)" : ""}` : ""}</span></span>
     ${issues ? `<span class="warn" title="מצלמות מנותקות או חסרות">⚠ ${issues}</span>` : ""}
     ${armBadge(d)}
+    ${updBadge(d)}
     ${remoteUrl(d) ? `<button class="open-ui" title="פתיחת ממשק המכשיר בטאב חדש (דרך NetBird)"
         onclick="event.stopPropagation(); window.open('${remoteUrl(d)}', '_blank', 'noopener')">פתח ממשק</button>` : ""}
     ${extra ? `<span class="cnt" title="מצלמות שקיימות במחשב ולא הוגדרו במוקד">+${extra}</span>` : ""}
@@ -740,6 +825,7 @@ function deviceRow(d) {
     <span class="acts" onclick="event.stopPropagation()">
       <button class="ico" onclick="openArming('${d.id}')">דריכה</button>
       <button class="ico" onclick="openLogs('${d.id}')">יומן</button>
+      <button class="ico" onclick="openUpdate('${d.id}')">עדכון גרסה</button>
       <button class="ico" onclick="setCamCount('${d.id}')">מספר מצלמות</button>
       <button class="ico" onclick="showPair('${d.id}')">קוד חיבור</button>
       <button class="ico" onclick="renameDevice('${d.id}')">שם</button>
@@ -769,6 +855,7 @@ function folderHtml(n) {
     ${closed ? "" : `<div class="kids">${kids.map(folderHtml).join("")}${devs.map(deviceRow).join("")}</div>`}</div>`;
 }
 function renderTree() {
+  if (updDev && !$("updModal").hidden) renderUpdate();     // חלון העדכון מתעדכן חי עם הדיווחים מהמחשב
   const roots = nodes.filter(n => !n.parent_id).sort((a, b) => a.name.localeCompare(b.name, "he"));
   const loose = devices.filter(d => !d.node_id || !nodes.some(n => n.id === d.node_id));
   const on = devices.filter(d => devState(d) === "on").length;
@@ -980,6 +1067,7 @@ if (!cfg || !cfg.anonKey || cfg.anonKey === 'מלא-כאן') {
     $("app").hidden = false; $("live").hidden = false; $("logout").hidden = false;
     me = ((await client.auth.getUser()).data.user || {}).email || "";
     await loadTree();
+    loadLatest(); setInterval(loadLatest, 5 * 60 * 1000);
     loadEvents();
     // ירוק/אדום תלוי בזמן שעבר — מחשבים מחדש כל 5 שניות גם בלי שינוי בנתונים
     ticker = setInterval(() => { renderTree(); evHeader(); }, 5000);
