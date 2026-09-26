@@ -75,7 +75,7 @@
 <body>
 <header>
   <img src="./logo.png" alt="SpiderNet">
-  <span class="t">דריכה ונטרול</span>
+  <span class="t">דריכה ונטרול<br><small id="who" style="color:var(--muted); font-weight:400; font-size:12px" dir="ltr"></small></span>
   <button id="logout" hidden>יציאה</button>
 </header>
 
@@ -116,7 +116,8 @@
 const $ = id => document.getElementById(id);
 const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const cfg = SUPABASE_CONFIG;
-const client = supabase.createClient(cfg.url, cfg.anonKey);
+// כניסה נפרדת מאתר המוקד (אותו דומיין): בלי storageKey משלו הדף "יורש" את כניסת המוקדן מאותו דפדפן
+const client = supabase.createClient(cfg.url, cfg.anonKey, {auth: {storageKey: "spidernet-arm-auth"}});
 let sites = [], poll = null, tick = null, sheetCtx = null;
 
 const DURS = [[15, "15 דק'"], [30, "חצי שעה"], [60, "שעה"], [120, "שעתיים"], [240, "4 שעות"], [480, "8 שעות"]];
@@ -208,8 +209,9 @@ async function send(id, action, minutes) {
   setTimeout(load, 1500);
 }
 
-function startApp() {
+async function startApp() {
   $("login").hidden = true; $("app").hidden = false; $("logout").hidden = false;
+  $("who").textContent = ((await client.auth.getUser()).data.user || {}).email || "";
   load();
   poll = setInterval(load, 5000);
   // ספירה לאחור חיה
@@ -226,6 +228,7 @@ function startApp() {
 function showLogin() {
   clearInterval(poll); clearInterval(tick); sites = [];
   $("app").hidden = true; $("logout").hidden = true; $("login").hidden = false; $("password").value = "";
+  $("who").textContent = "";
 }
 $("login").addEventListener("submit", async ev => {
   ev.preventDefault();
