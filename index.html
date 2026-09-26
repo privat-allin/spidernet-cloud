@@ -156,9 +156,10 @@ function render(rows) {
     const src = signed.get(e.image_path);
     const img = src ? `<img src="${esc(src)}">` : "";
     const kind = e.kind === "camera" ? `<span class="badge cam">בריאות מצלמה</span>` : `<span class="badge">${esc(e.action)}</span>`;
-    const defCam = e.channel ? cams.find(c => c.device_id === e.device_id && c.channel === e.channel) : null;
-    const camName = defCam ? defCam.name : e.camera;
-    const camn = camName ? `<span class="badge camn">${esc(camName)}</span>` : "";
+    const evDev = devices.find(x => x.id === e.device_id);
+    const cn = e.channel && evDev && ((evDev.info || {}).cameras || []).some(x => x.ch === e.channel)
+      ? camName(evDev, e.channel) : e.camera;
+    const camn = cn ? `<span class="badge camn">${esc(cn)}</span>` : "";
     const dev = devices.find(d => d.id === e.device_id);
     const devn = dev && sel.type !== "device" ? `<span class="badge" style="background:#12261a;color:var(--green)">${esc(dev.name)}</span>` : "";
     const site = e.site ? `<span class="site">${esc(e.site)}</span> • ` : "";
@@ -198,6 +199,11 @@ function camState(d, c) {
   return r.status === "online" ? {st: "on", text: "משדרת"} : {st: "off", text: CAM_ST[r.status] || r.status};
 }
 const devCams = id => cams.filter(c => c.device_id === id).sort((a, b) => a.channel - b.channel);
+// שם המצלמה מגיע מהמחשב (הדיווח האחרון על הערוץ) — שינוי שם במחשב מתעדכן כאן מעצמו
+function camName(d, ch) {
+  const r = (((d && d.info) || {}).cameras || []).find(x => x.ch === ch);
+  return r && r.name ? r.name : "ערוץ " + ch;
+}
 function camIssues(d) { return devCams(d.id).filter(c => ["off", "missing"].includes(camState(d, c).st)).length; }
 const collapsed = new Set(JSON.parse(localStorage.getItem("collapsed") || "[]"));
 const saveCollapsed = () => localStorage.setItem("collapsed", JSON.stringify([...collapsed]));
@@ -239,11 +245,9 @@ function deviceRow(d) {
     const cs = camState(d, c), isSel = sel.type === "camera" && sel.id === d.id && sel.ch === c.channel;
     return `<div class="row camrow ${isSel ? "sel" : ""}" onclick="selectCamera('${d.id}', ${c.channel})">
       <span class="sdot ${cs.st}" title="${cs.text}"></span>
-      <span class="txt"><span class="name"><span class="ch">${c.channel}</span>${ICON_CAM}${esc(c.name)}</span>
+      <span class="txt"><span class="name"><span class="ch">${c.channel}</span>${ICON_CAM}${esc(camName(d, c.channel))}</span>
         <span class="meta">${cs.text}</span></span>
       <span class="acts" onclick="event.stopPropagation()">
-        <button class="ico" onclick="renameCam('${c.id}')">שם</button>
-        <button class="ico" onclick="setCamChannel('${c.id}')">ערוץ</button>
         <button class="ico del" onclick="delCam('${c.id}')">מחק</button>
       </span></div>`;
   }).join("");
@@ -255,7 +259,7 @@ function deviceRow(d) {
     ${issues ? `<span class="warn" title="מצלמות מנותקות או חסרות">⚠ ${issues}</span>` : ""}
     ${extra ? `<span class="cnt" title="מצלמות שקיימות במחשב ולא הוגדרו במוקד">+${extra}</span>` : ""}
     <span class="acts" onclick="event.stopPropagation()">
-      <button class="ico" onclick="addCam('${d.id}')">+ מצלמה</button>
+      <button class="ico" onclick="setCamCount('${d.id}')">מספר מצלמות</button>
       <button class="ico" onclick="showPair('${d.id}')">קוד חיבור</button>
       <button class="ico" onclick="renameDevice('${d.id}')">שם</button>
       <button class="ico" onclick="moveDevice('${d.id}')">העבר</button>
@@ -365,28 +369,28 @@ async function addDevice(nodeId) {
   collapsed.delete(nodeId); saveCollapsed(); renderTree();
   showPair(data[0].id);   // מיד אחרי ההוספה — הקוד להדבקה במכשיר
 }
-async function addCam(deviceId) {
-  const used = devCams(deviceId).map(c => c.channel);
-  let ch = 1; while (used.includes(ch)) ch++;
-  const name = prompt(`שם המצלמה בערוץ ${ch} (ערוץ ${ch} = המצלמה ה-${ch} ברשימה במחשב):`, `מצלמה ${ch}`);
-  if (!name || !name.trim()) return;
-  await db(client.from("device_cameras").insert({device_id: deviceId, channel: ch, name: name.trim()}));
+// מספר המצלמות של המכשיר = ערוצים 1..N. השמות מגיעים מהמחשב, לא מוגדרים כאן
+async function setCamCount(deviceId) {
+  const d = devices.find(x => x.id === deviceId), cur = devCams(deviceId);
+  const reported = ((d.info || {}).cameras || []).length;
+  const v = prompt(`כמה מצלמות אמורות להיות מחוברות ל"${d.name}"?` +
+    (reported ? `\n(המחשב מדווח כרגע על ${reported})` : ""), cur.length || reported || 4);
+  if (v === null) return;
+  const n = parseInt(v, 10);
+  if (!(n >= 0 && n <= 64)) return alert("מספר בין 0 ל-64");
+  const extra = cur.filter(c => c.channel > n);
+  if (extra.length && !confirm(`להסיר מהמוקד את ערוצים ${extra.map(c => c.channel).join(", ")}? במחשב עצמו לא משתנה כלום.`)) return;
+  const have = new Set(cur.map(c => c.channel));
+  const add = [];
+  for (let ch = 1; ch <= n; ch++) if (!have.has(ch)) add.push({device_id: deviceId, channel: ch, name: camName(d, ch)});
+  if (extra.length) await db(client.from("device_cameras").delete().in("id", extra.map(c => c.id)));
+  if (add.length) await db(client.from("device_cameras").insert(add));
   collapsed.delete("dev:" + deviceId); saveCollapsed(); renderTree();
-}
-async function renameCam(id) {
-  const c = cams.find(x => x.id === id), name = prompt("שם חדש למצלמה:", c.name);
-  if (name && name.trim() && name !== c.name) await db(client.from("device_cameras").update({name: name.trim()}).eq("id", id));
-}
-async function setCamChannel(id) {
-  const c = cams.find(x => x.id === id);
-  const v = parseInt(prompt(`מספר ערוץ ל"${c.name}" (המצלמה במקום הזה ברשימה במחשב):`, c.channel), 10);
-  if (!(v >= 1 && v <= 64) || v === c.channel) return;
-  if (devCams(c.device_id).some(x => x.channel === v)) return alert(`ערוץ ${v} כבר תפוס במכשיר הזה`);
-  await db(client.from("device_cameras").update({channel: v}).eq("id", id));
 }
 async function delCam(id) {
   const c = cams.find(x => x.id === id);
-  if (confirm(`להסיר את "${c.name}" (ערוץ ${c.channel}) מהמוקד? במחשב עצמו לא משתנה כלום.`))
+  const d = devices.find(x => x.id === c.device_id);
+  if (confirm(`להסיר את "${camName(d, c.channel)}" (ערוץ ${c.channel}) מהמוקד? במחשב עצמו לא משתנה כלום.`))
     await db(client.from("device_cameras").delete().eq("id", id));
 }
 async function renameDevice(id) {
@@ -432,7 +436,7 @@ $("showAll").onclick = () => { sel = {type: "all", id: null}; renderTree(); load
 function evHeader() {
   if (sel.type === "camera") {
     const d = devices.find(x => x.id === sel.id), c = cams.find(x => x.device_id === sel.id && x.channel === sel.ch);
-    $("evTitle").textContent = `אירועים — ${d ? d.name : ""} / ${c ? c.name : "ערוץ " + sel.ch}`;
+    $("evTitle").textContent = `אירועים — ${d ? d.name : ""} / ${camName(d, sel.ch)}`;
     $("evSub").textContent = d && c ? `ערוץ ${c.channel} • ${camState(d, c).text}` : "";
   } else if (sel.type === "device") {
     const d = devices.find(x => x.id === sel.id);
