@@ -74,7 +74,11 @@
   .kids { margin-inline-start:22px; border-inline-start:1px dashed var(--border); padding-inline-start:4px; }
   .sdot { width:11px; height:11px; border-radius:50%; flex:none; background:#555; }
   .sdot.on { background:var(--green); box-shadow:0 0 6px var(--green); }
-  .sdot.off { background:var(--red); }
+  .sdot.off, .sdot.missing { background:var(--red); }
+  .sdot.unk { background:#555; }
+  .camrow .name { font-weight:400; font-size:13px; }
+  .camrow .ch { color:var(--muted); font-size:11.5px; margin-inline-end:2px; }
+  .warn { font-size:11.5px; border-radius:10px; padding:1px 8px; background:#3d1d20; color:var(--red); }
   .cnt { font-size:11.5px; border-radius:10px; padding:1px 8px; background:#12261a; color:var(--green); }
   .cnt.bad { background:#3d1d20; color:var(--red); }
   .modal { position:fixed; inset:0; background:rgba(0,0,0,.75); display:flex; align-items:center; justify-content:center; z-index:50; }
@@ -152,7 +156,9 @@ function render(rows) {
     const src = signed.get(e.image_path);
     const img = src ? `<img src="${esc(src)}">` : "";
     const kind = e.kind === "camera" ? `<span class="badge cam">בריאות מצלמה</span>` : `<span class="badge">${esc(e.action)}</span>`;
-    const camn = e.camera ? `<span class="badge camn">${esc(e.camera)}</span>` : "";
+    const defCam = e.channel ? cams.find(c => c.device_id === e.device_id && c.channel === e.channel) : null;
+    const camName = defCam ? defCam.name : e.camera;
+    const camn = camName ? `<span class="badge camn">${esc(camName)}</span>` : "";
     const dev = devices.find(d => d.id === e.device_id);
     const devn = dev && sel.type !== "device" ? `<span class="badge" style="background:#12261a;color:var(--green)">${esc(dev.name)}</span>` : "";
     const site = e.site ? `<span class="site">${esc(e.site)}</span> • ` : "";
@@ -180,7 +186,19 @@ const ICON_DEVICE = `<svg class="ic" viewBox="0 0 24 24" style="width:18px;heigh
 
 // בחירה בעץ: all | device | folder — קובעת אילו אירועים מוצגים משמאל
 let sel = {type: "all", id: null};
-let nodes = [], devices = [];
+let nodes = [], devices = [], cams = [];   // cams = מצלמות שהוגדרו במוקד (device_cameras)
+const ICON_CAM = `<svg class="ic" viewBox="0 0 24 24" style="width:16px;height:16px"><rect x="2.5" y="7" width="13" height="10" rx="2" fill="#6b7280"/>
+  <path d="M15.5 10.5l5-3v9l-5-3z" fill="#9ca3af"/><circle cx="9" cy="12" r="2.6" fill="#111827"/><circle cx="9" cy="12" r="1.2" fill="#60a5fa"/></svg>`;
+const CAM_ST = {online: "משדרת", connecting: "מתחברת...", error: "מנותקת", idle: "לא הוגדר מקור במחשב", disabled: "כבויה במחשב"};
+// מצב מצלמה מוגדרת: לפי מה שהמחשב דיווח על אותו ערוץ בהארטביט האחרון
+function camState(d, c) {
+  if (devState(d) !== "on") return {st: "unk", text: "לא ידוע — המחשב מנותק"};
+  const r = ((d.info || {}).cameras || []).find(x => x.ch === c.channel);
+  if (!r) return {st: "missing", text: "לא קיימת במחשב (אין ערוץ " + c.channel + ")"};
+  return r.status === "online" ? {st: "on", text: "משדרת"} : {st: "off", text: CAM_ST[r.status] || r.status};
+}
+const devCams = id => cams.filter(c => c.device_id === id).sort((a, b) => a.channel - b.channel);
+function camIssues(d) { return devCams(d.id).filter(c => ["off", "missing"].includes(camState(d, c).st)).length; }
 const collapsed = new Set(JSON.parse(localStorage.getItem("collapsed") || "[]"));
 const saveCollapsed = () => localStorage.setItem("collapsed", JSON.stringify([...collapsed]));
 
@@ -204,29 +222,54 @@ function subtree(id) {
   let grew = true;
   while (grew) { grew = false; nodes.forEach(n => { if (n.parent_id && ids.has(n.parent_id) && !ids.has(n.id)) { ids.add(n.id); grew = true; } }); }
   const ds = devices.filter(d => ids.has(d.node_id));
-  return {total: ds.length, on: ds.filter(d => devState(d) === "on").length};
+  return {total: ds.length, on: ds.filter(d => devState(d) === "on").length,
+          camIssues: ds.reduce((n, d) => n + (devState(d) === "on" ? camIssues(d) : 0), 0)};
 }
 function deviceRow(d) {
-  const st = devState(d), i = d.info || {};
-  const cams = i.cameras_total ? ` • מצלמות ${i.cameras_online}/${i.cameras_total}` : "";
+  const st = devState(d), i = d.info || {}, dc = devCams(d.id), key = "dev:" + d.id, closed = collapsed.has(key);
+  let camsTxt = "";
+  if (dc.length) {
+    const ok = dc.filter(c => camState(d, c).st === "on").length;
+    camsTxt = st === "on" ? ` • מצלמות ${ok}/${dc.length}` : ` • ${dc.length} מצלמות`;
+  } else if (i.cameras_total) camsTxt = ` • ${i.cameras_total} מצלמות במחשב (לא הוגדרו במוקד)`;
+  const extra = st === "on" ? ((i.cameras || []).filter(r => !dc.some(c => c.channel === r.ch)).length) : 0;
+  const issues = st === "on" ? camIssues(d) : 0;
   const label = {on: "מחובר", off: "מנותק", never: "ממתין לחיבור ראשון"}[st];
+  const camRows = closed ? "" : dc.map(c => {
+    const cs = camState(d, c), isSel = sel.type === "camera" && sel.id === d.id && sel.ch === c.channel;
+    return `<div class="row camrow ${isSel ? "sel" : ""}" onclick="selectCamera('${d.id}', ${c.channel})">
+      <span class="sdot ${cs.st}" title="${cs.text}"></span>
+      <span class="txt"><span class="name"><span class="ch">${c.channel}</span>${ICON_CAM}${esc(c.name)}</span>
+        <span class="meta">${cs.text}</span></span>
+      <span class="acts" onclick="event.stopPropagation()">
+        <button class="ico" onclick="renameCam('${c.id}')">שם</button>
+        <button class="ico" onclick="setCamChannel('${c.id}')">ערוץ</button>
+        <button class="ico del" onclick="delCam('${c.id}')">מחק</button>
+      </span></div>`;
+  }).join("");
   return `<div class="row ${sel.type === "device" && sel.id === d.id ? "sel" : ""}" onclick="selectDevice('${d.id}')">
+    <span class="caret" onclick="event.stopPropagation(); toggle('${key}')">${dc.length ? (closed ? "◂" : "▾") : "·"}</span>
     <span class="sdot ${st}" title="${label}"></span>
     <span class="txt"><span class="name">${ICON_DEVICE}${esc(d.name)}</span>
-      <span class="meta">${label} • ${agoText(d.last_seen)}${cams} • כל ${d.heartbeat_sec} שנ'</span></span>
+      <span class="meta">${label} • ${agoText(d.last_seen)}${camsTxt} • כל ${d.heartbeat_sec} שנ'</span></span>
+    ${issues ? `<span class="warn" title="מצלמות מנותקות או חסרות">⚠ ${issues}</span>` : ""}
+    ${extra ? `<span class="cnt" title="מצלמות שקיימות במחשב ולא הוגדרו במוקד">+${extra}</span>` : ""}
     <span class="acts" onclick="event.stopPropagation()">
+      <button class="ico" onclick="addCam('${d.id}')">+ מצלמה</button>
       <button class="ico" onclick="showPair('${d.id}')">קוד חיבור</button>
       <button class="ico" onclick="renameDevice('${d.id}')">שם</button>
       <button class="ico" onclick="moveDevice('${d.id}')">העבר</button>
       <button class="ico" onclick="setInterval_('${d.id}')">מרווח</button>
       <button class="ico del" onclick="delDevice('${d.id}')">מחק</button>
-    </span></div>`;
+    </span></div>
+    ${camRows ? `<div class="kids">${camRows}</div>` : ""}`;
 }
 function folderHtml(n) {
   const kids = nodes.filter(x => x.parent_id === n.id).sort((a, b) => a.name.localeCompare(b.name, "he"));
   const devs = devices.filter(d => d.node_id === n.id).sort((a, b) => a.name.localeCompare(b.name, "he"));
   const c = subtree(n.id), closed = collapsed.has(n.id);
-  const cnt = c.total ? `<span class="cnt ${c.on < c.total ? "bad" : ""}">${c.on}/${c.total}</span>` : "";
+  const cnt = (c.total ? `<span class="cnt ${c.on < c.total ? "bad" : ""}" title="מכשירים מחוברים">${c.on}/${c.total}</span>` : "")
+    + (c.camIssues ? ` <span class="warn" title="מצלמות מנותקות או חסרות">⚠ ${c.camIssues}</span>` : "");
   return `<div class="folder"><div class="row ${sel.type === "folder" && sel.id === n.id ? "sel" : ""}">
       <span class="caret" onclick="toggle('${n.id}')">${kids.length || devs.length ? (closed ? "◂" : "▾") : "·"}</span>
       <span class="name" onclick="selectFolder('${n.id}')" title="הצג את כל האירועים של התיקייה">${n.kind === "customer" ? ICON_CUSTOMER : ICON_FOLDER}${esc(n.name)}</span> ${cnt}
@@ -243,10 +286,13 @@ function renderTree() {
   const loose = devices.filter(d => !d.node_id || !nodes.some(n => n.id === d.node_id));
   const on = devices.filter(d => devState(d) === "on").length;
   const never = devices.filter(d => devState(d) === "never").length;
+  // מצלמה "לא תקינה" = מנותקת, חסרה במחשב, או שהמחשב שלה מנותק
+  const camBad = cams.filter(c => { const d = devices.find(x => x.id === c.device_id); return !d || camState(d, c).st !== "on"; }).length;
   $("summary").innerHTML = `<div class="stat"><b>${devices.length}</b>מכשירים</div>
     <div class="stat on"><b>${on}</b>מחוברים</div>
     <div class="stat off"><b>${devices.length - on - never}</b>מנותקים</div>
-    ${never ? `<div class="stat"><b>${never}</b>ממתינים לחיבור ראשון</div>` : ""}`;
+    ${never ? `<div class="stat"><b>${never}</b>ממתינים לחיבור ראשון</div>` : ""}
+    ${cams.length ? `<div class="stat ${camBad ? "off" : "on"}"><b>${cams.length - camBad}/${cams.length}</b>מצלמות תקינות</div>` : ""}`;
   $("tree").innerHTML = (roots.map(folderHtml).join("")
     + (loose.length ? `<div class="folder"><div class="row"><span class="caret">▾</span><span class="name" style="color:var(--muted)">לא משויכים</span></div>
        <div class="kids">${loose.map(deviceRow).join("")}</div></div>` : ""))
@@ -281,15 +327,17 @@ async function db(q) {   // מריץ שאילתה, מציג שגיאה, ומרע
   return data;
 }
 async function loadTree() {
-  const [n, d] = await Promise.all([
+  const [n, d, c] = await Promise.all([
     client.from("tree_nodes").select("*"),
     client.from("devices").select("*"),
+    client.from("device_cameras").select("*"),
   ]);
-  if (n.error || d.error) { $("tree").innerHTML = `<div class="empty">שגיאה: ${esc((n.error || d.error).message)}</div>`; return; }
-  nodes = n.data; devices = d.data;
+  if (n.error || d.error || c.error) { $("tree").innerHTML = `<div class="empty">שגיאה: ${esc((n.error || d.error || c.error).message)}</div>`; return; }
+  nodes = n.data; devices = d.data; cams = c.data;
   // הפריט הנבחר נמחק — חוזרים ל"כל האירועים"
   if ((sel.type === "device" && !devices.some(x => x.id === sel.id)) ||
-      (sel.type === "folder" && !nodes.some(x => x.id === sel.id))) { sel = {type: "all", id: null}; loadEvents(); }
+      (sel.type === "folder" && !nodes.some(x => x.id === sel.id)) ||
+      (sel.type === "camera" && !cams.some(x => x.device_id === sel.id && x.channel === sel.ch))) { sel = {type: "all", id: null}; loadEvents(); }
   renderTree();
 }
 async function addFolder(parent) {
@@ -316,6 +364,30 @@ async function addDevice(nodeId) {
   const data = await db(client.from("devices").insert({name: name.trim(), node_id: nodeId}).select());
   collapsed.delete(nodeId); saveCollapsed(); renderTree();
   showPair(data[0].id);   // מיד אחרי ההוספה — הקוד להדבקה במכשיר
+}
+async function addCam(deviceId) {
+  const used = devCams(deviceId).map(c => c.channel);
+  let ch = 1; while (used.includes(ch)) ch++;
+  const name = prompt(`שם המצלמה בערוץ ${ch} (ערוץ ${ch} = המצלמה ה-${ch} ברשימה במחשב):`, `מצלמה ${ch}`);
+  if (!name || !name.trim()) return;
+  await db(client.from("device_cameras").insert({device_id: deviceId, channel: ch, name: name.trim()}));
+  collapsed.delete("dev:" + deviceId); saveCollapsed(); renderTree();
+}
+async function renameCam(id) {
+  const c = cams.find(x => x.id === id), name = prompt("שם חדש למצלמה:", c.name);
+  if (name && name.trim() && name !== c.name) await db(client.from("device_cameras").update({name: name.trim()}).eq("id", id));
+}
+async function setCamChannel(id) {
+  const c = cams.find(x => x.id === id);
+  const v = parseInt(prompt(`מספר ערוץ ל"${c.name}" (המצלמה במקום הזה ברשימה במחשב):`, c.channel), 10);
+  if (!(v >= 1 && v <= 64) || v === c.channel) return;
+  if (devCams(c.device_id).some(x => x.channel === v)) return alert(`ערוץ ${v} כבר תפוס במכשיר הזה`);
+  await db(client.from("device_cameras").update({channel: v}).eq("id", id));
+}
+async function delCam(id) {
+  const c = cams.find(x => x.id === id);
+  if (confirm(`להסיר את "${c.name}" (ערוץ ${c.channel}) מהמוקד? במחשב עצמו לא משתנה כלום.`))
+    await db(client.from("device_cameras").delete().eq("id", id));
 }
 async function renameDevice(id) {
   const d = devices.find(x => x.id === id), name = prompt("שם חדש למכשיר:", d.name);
@@ -349,15 +421,20 @@ function folderIds(id) {   // התיקייה וכל מה שמתחתיה
   return ids;
 }
 function selDeviceIds() {   // null = הכל
-  if (sel.type === "device") return [sel.id];
+  if (sel.type === "device" || sel.type === "camera") return [sel.id];
   if (sel.type === "folder") { const f = folderIds(sel.id); return devices.filter(d => f.has(d.node_id)).map(d => d.id); }
   return null;
 }
 function selectDevice(id) { sel = {type: "device", id}; renderTree(); loadEvents(); }
+function selectCamera(id, ch) { sel = {type: "camera", id, ch}; renderTree(); loadEvents(); }
 function selectFolder(id) { sel = {type: "folder", id}; renderTree(); loadEvents(); }
 $("showAll").onclick = () => { sel = {type: "all", id: null}; renderTree(); loadEvents(); };
 function evHeader() {
-  if (sel.type === "device") {
+  if (sel.type === "camera") {
+    const d = devices.find(x => x.id === sel.id), c = cams.find(x => x.device_id === sel.id && x.channel === sel.ch);
+    $("evTitle").textContent = `אירועים — ${d ? d.name : ""} / ${c ? c.name : "ערוץ " + sel.ch}`;
+    $("evSub").textContent = d && c ? `ערוץ ${c.channel} • ${camState(d, c).text}` : "";
+  } else if (sel.type === "device") {
     const d = devices.find(x => x.id === sel.id);
     $("evTitle").textContent = "אירועים — " + (d ? d.name : "");
     $("evSub").textContent = d ? `${{on: "מחובר", off: "מנותק", never: "טרם התחבר"}[devState(d)]} • ${agoText(d.last_seen)}` : "";
@@ -379,6 +456,7 @@ async function loadEvents() {
   feed.innerHTML = '<div class="empty">טוען אירועים...</div>';
   let q = client.from("events").select("*").order("ts", { ascending: false }).limit(60);
   if (ids) q = ids.length === 1 ? q.eq("device_id", ids[0]) : q.in("device_id", ids);
+  if (sel.type === "camera") q = q.eq("channel", sel.ch);
   const { data, error } = await q;
   if (tok !== evToken) return;    // בינתיים נבחר משהו אחר
   if (error) { feed.innerHTML = '<div class="empty">שגיאת חיבור לענן: ' + esc(error.message) + '</div>'; return; }
@@ -406,6 +484,7 @@ if (!cfg || !cfg.anonKey || cfg.anonKey === 'מלא-כאן') {
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "events" }, async payload => {
         const ids = selDeviceIds();
         if (ids && !ids.includes(payload.new.device_id)) return;   // לא שייך לבחירה הנוכחית
+        if (sel.type === "camera" && payload.new.channel !== sel.ch) return;
         rows = [payload.new, ...rows].slice(0, 60);
         await signImages(client, [payload.new]);
         render(rows);
@@ -414,13 +493,14 @@ if (!cfg || !cfg.anonKey || cfg.anonKey === 'מלא-כאן') {
     channels.push(client.channel("tree")
       .on("postgres_changes", { event: "*", schema: "public", table: "devices" }, loadTree)
       .on("postgres_changes", { event: "*", schema: "public", table: "tree_nodes" }, loadTree)
+      .on("postgres_changes", { event: "*", schema: "public", table: "device_cameras" }, loadTree)
       .subscribe());
   }
 
   function showLogin() {
     channels.forEach(c => client.removeChannel(c)); channels = [];
     if (ticker) { clearInterval(ticker); ticker = null; }
-    rows = []; signed.clear(); feed.innerHTML = ""; nodes = []; devices = []; sel = {type: "all", id: null};
+    rows = []; signed.clear(); feed.innerHTML = ""; nodes = []; devices = []; cams = []; sel = {type: "all", id: null};
     $("app").hidden = true; $("live").hidden = true; $("logout").hidden = true;
     $("login").hidden = false;
     $("password").value = "";
