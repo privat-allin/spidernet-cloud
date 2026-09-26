@@ -62,7 +62,10 @@
   /* כפתורי הפעולות — בשורה נפרדת מתחת לשורה הנבחרת, כדי שלא ידחקו ויזיזו את התוכן */
   .row { flex-wrap:wrap; }
   .row .acts { display:none; flex-basis:100%; flex-wrap:wrap; gap:5px; padding:6px 0 2px; padding-inline-start:26px; }
-  .row.sel .acts { display:flex; }
+  .row.menu .acts { display:flex; }
+  .menu-btn { background:none; border:1px solid var(--border); color:var(--muted); border-radius:6px; width:30px; height:24px;
+              font-size:15px; line-height:1; cursor:pointer; flex:none; font-family:inherit; }
+  .menu-btn:hover, .menu-btn.on { color:var(--text); border-color:var(--muted); background:var(--card); }
   .row .acts .ico { padding:4px 10px; font-size:12.5px; }
   .row .open-ui { flex:none; }
   .row .txt { display:flex; flex-direction:column; min-width:0; flex:1; }
@@ -105,6 +108,27 @@
   #lightbox .nav:hover { background:rgba(255,255,255,.2); }
   #lightbox .nav:disabled { opacity:.15; cursor:default; }
   #lightbox .prev { right:16px; } #lightbox .next { left:16px; }
+  /* ---- התראות שווא ---- */
+  .fa-btn { background:none; border:1px solid var(--border); color:var(--muted); border-radius:6px; padding:2px 9px;
+            font-size:12px; cursor:pointer; font-family:inherit; margin-top:4px; }
+  .fa-btn:hover { color:var(--amber, #d29922); border-color:var(--amber, #d29922); }
+  .badge.fa { background:#3a2e12; color:#e3b341; }
+  .badge.fa-wait { background:#1d2733; color:#79c0ff; }
+  .badge.fa-gone { background:#262626; color:var(--muted); }
+  .fa-meta { font-size:12px; color:var(--muted); margin-top:4px; display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+  .fa-meta select, .fa-meta input { background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:6px;
+                                    padding:2px 6px; font-size:12px; font-family:inherit; }
+  .fa-meta input { min-width:180px; flex:1; }
+  #faWrap { position:relative; display:inline-block; max-width:100%; }
+  #faWrap img { max-width:100%; max-height:60vh; display:block; border-radius:6px; }
+  .fa-det { position:absolute; border:2px solid #79c0ff; border-radius:3px; cursor:pointer; background:rgba(121,192,255,.08); }
+  .fa-det.sel { border-color:#f85149; background:rgba(248,81,73,.22); }
+  .fa-det span { position:absolute; top:-19px; right:-2px; background:rgba(0,0,0,.75); color:#fff; font-size:11px;
+                 padding:1px 5px; border-radius:4px; white-space:nowrap; }
+  .fa-det.sel span { background:#f85149; }
+  .ev-head select { background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:7px; padding:5px 8px;
+                    font-family:inherit; font-size:13px; }
+  .btn.on { background:#3a2e12; color:#e3b341; border-color:#e3b341; }
   #lightbox .x { position:absolute; top:14px; left:16px; background:none; border:1px solid #555; color:#ddd;
                  border-radius:8px; padding:4px 12px; cursor:pointer; font-size:14px; }
 </style>
@@ -139,10 +163,27 @@
     <div class="ev-head">
       <div><div class="t" id="evTitle">כל האירועים</div><div class="sub" id="evSub">מכל המכשירים — מתעדכן בזמן אמת</div></div>
       <button class="btn ghost" id="showAll" hidden>הצג הכל</button>
+      <select id="faStatus" hidden title="סינון לפי סטטוס טיפול">
+        <option value="">כל הסטטוסים</option><option value="new">חדש</option>
+        <option value="reviewed">נבדק</option><option value="fixed">טופל</option>
+      </select>
+      <button class="btn ghost" id="faToggle" title="כל האירועים שסומנו כהתראת שווא — לבדיקה וטיפול">מאגר התראות שווא</button>
     </div>
     <div id="feed"><div class="empty">ממתין לאירועים...</div></div>
   </section>
 </main>
+<div class="modal" id="faModal" hidden><div class="box" style="width:min(760px, 96vw)">
+  <h2 style="color:var(--text); margin-top:0">סימון התראת שווא</h2>
+  <div style="font-size:13px; color:var(--muted); margin-bottom:10px">לחץ על התיבה של הזיהוי השגוי (אפשר כמה).
+    המחשב של הלקוח יקבל את הסימון ויתעלם מזיהוי דומה באותו מקום. הסימון נשמר גם במאגר התראות השווא.</div>
+  <div style="text-align:center"><div id="faWrap"><img id="faImg" alt=""></div></div>
+  <input id="faNote" placeholder="הערה (לא חובה) — למשל: עץ שזז ברוח"
+    style="width:100%; margin-top:12px; background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:7px; padding:8px 10px; font-family:inherit">
+  <div style="display:flex; gap:8px; margin-top:12px">
+    <button class="btn" id="faOk" style="flex:1">סמן כהתראת שווא</button>
+    <button class="btn ghost" id="faCancel">ביטול</button>
+  </div>
+</div></div>
 <div id="lightbox" hidden>
   <button class="x" id="lbClose">סגור ✕</button>
   <button class="nav prev" id="lbPrev" title="האירוע הקודם (חדש יותר)">›</button>
@@ -192,11 +233,83 @@ function render(rows) {
     const dev = devices.find(d => d.id === e.device_id);
     const devn = dev && sel.type !== "device" ? `<span class="badge" style="background:#12261a;color:var(--green)">${esc(dev.name)}</span>` : "";
     const site = e.site && e.site !== "main" ? `<span class="site">${esc(e.site)}</span> • ` : "";
-    return `<div class="ev">${img}<div class="meta">${kind}${devn}${camn}
+    return `<div class="ev">${img}<div class="meta" style="flex:1; min-width:0">${kind}${devn}${camn}
       <b>${new Date((e.ts || 0) * 1000).toLocaleString("he-IL")}</b><br>${esc(e.message)}<br>
-      <span class="site">${site}חוק: ${esc(e.rule || "-")}</span></div></div>`;
+      <span class="site">${site}חוק: ${esc(e.rule || "-")}</span>${faHtml(e)}</div></div>`;
   }).join("");
 }
+
+// ================= התראות שווא =================
+// המוקדן מסמן כאן → המכשיר מושך את הסימון (fa_applied) ויוצר אזור התעלמות. סימון במחשב המקומי עולה לכאן.
+// המאגר = כל האירועים שסומנו, עם סטטוס טיפול והערה — לבדיקה ושיפור המערכת בהמשך.
+const HEB_CLS = {person: "אדם", car: "רכב", truck: "משאית", bus: "אוטובוס", motorcycle: "אופנוע", bicycle: "אופניים"};
+const FA_STATUS = {new: "חדש", reviewed: "נבדק", fixed: "טופל"};
+let faMode = false, me = "";
+function faHtml(e) {
+  if (e.kind === "camera") return "";
+  if (!e.false_alarm) {
+    return (e.dets || []).length && signed.get(e.image_path)
+      ? `<br><button class="fa-btn" onclick="openFa('${e.id}')">התראת שווא?</button>` : "";
+  }
+  const st = e.fa_applied === true ? `<span class="badge fa">התראת שווא — הוחל במכשיר</span>`
+    : e.fa_applied === false ? `<span class="badge fa-gone" title="האירוע כבר נמחק מהמחשב לפי זמן השמירה">התראת שווא — נשמר במאגר בלבד</span>`
+    : `<span class="badge fa-wait">התראת שווא — ממתין למכשיר</span>`;
+  const picked = (e.false_alarm || []).map(i => (e.dets || [])[i]).filter(Boolean)
+    .map(d => `${HEB_CLS[d.cls] || d.cls} ${Math.round(d.conf * 100)}%`).join(", ");
+  const who = `${e.fa_source === "device" ? "סומן במחשב המקומי" : "סומן במוקד" + (e.fa_by ? " ע\"י " + esc(e.fa_by) : "")}`
+    + (e.fa_at ? " • " + new Date(e.fa_at).toLocaleString("he-IL") : "");
+  const extra = faMode ? `<div class="fa-meta">
+      <select onchange="faSave('${e.id}', {fa_status: this.value})">
+        ${Object.entries(FA_STATUS).map(([k, v]) => `<option value="${k}" ${(e.fa_status || "new") === k ? "selected" : ""}>${v}</option>`).join("")}
+      </select>
+      <input value="${esc(e.fa_note || "")}" placeholder="הערה לטיפול..." onchange="faSave('${e.id}', {fa_note: this.value})">
+    </div>` : "";
+  return `<br>${st}<div class="fa-meta">${picked ? "זיהוי שגוי: " + esc(picked) + " • " : ""}${who}</div>${extra}`;
+}
+let faEv = null, faSel = new Set();
+function openFa(id) {
+  faEv = rows.find(e => String(e.id) === String(id));
+  if (!faEv) return;
+  const dets = faEv.dets || [];
+  faSel = new Set(dets.length === 1 ? [0] : []);
+  $("faImg").src = signed.get(faEv.image_path);
+  $("faNote").value = "";
+  $("faWrap").querySelectorAll(".fa-det").forEach(n => n.remove());
+  dets.forEach((d, i) => {
+    const [x1, y1, x2, y2] = d.box;
+    const div = document.createElement("div");
+    div.className = "fa-det" + (faSel.has(i) ? " sel" : "");
+    Object.assign(div.style, {left: x1 * 100 + "%", top: y1 * 100 + "%", width: (x2 - x1) * 100 + "%", height: (y2 - y1) * 100 + "%"});
+    div.innerHTML = `<span>${HEB_CLS[d.cls] || d.cls} ${Math.round(d.conf * 100)}%</span>`;
+    div.onclick = () => { faSel.has(i) ? faSel.delete(i) : faSel.add(i); div.classList.toggle("sel"); };
+    $("faWrap").appendChild(div);
+  });
+  $("faModal").hidden = false;
+}
+$("faCancel").onclick = () => $("faModal").hidden = true;
+$("faModal").onclick = e => { if (e.target.id === "faModal") $("faModal").hidden = true; };
+$("faOk").onclick = async () => {
+  if (!faSel.size) return alert("לחץ על התיבה של הזיהוי השגוי");
+  const ok = await faSave(faEv.id, {false_alarm: [...faSel].sort((a, b) => a - b), fa_source: "moked", fa_by: me,
+    fa_at: new Date().toISOString(), fa_applied: null, fa_status: "new", fa_note: $("faNote").value.trim() || null});
+  if (ok) { $("faModal").hidden = true; if (!$("lightbox").hidden) showLb(); }
+};
+async function faSave(id, patch) {
+  const { error } = await client.from("events").update(patch).eq("id", id);
+  if (error) { alert("השמירה נכשלה: " + error.message); return false; }
+  const r = rows.find(e => String(e.id) === String(id));
+  if (r) Object.assign(r, patch);
+  if (!("fa_note" in patch && Object.keys(patch).length === 1)) render(rows);   // הקלדת הערה — בלי לרנדר מחדש
+  return true;
+}
+$("faToggle").onclick = () => {
+  faMode = !faMode;
+  $("faToggle").classList.toggle("on", faMode);
+  $("faToggle").textContent = faMode ? "חזרה לאירועים" : "מאגר התראות שווא";
+  $("faStatus").hidden = !faMode;
+  loadEvents();
+};
+$("faStatus").onchange = () => loadEvents();
 
 // ================= תמונת אירוע מוגדלת =================
 let lbIdx = -1;
@@ -215,7 +328,7 @@ function showLb() {
   const cam = e.channel && dev ? camName(dev, e.channel) : e.camera;
   $("lbCap").innerHTML = `<b>${esc(e.message)}</b><br>
     <span class="t">${new Date((e.ts || 0) * 1000).toLocaleString("he-IL")}${dev ? " • " + esc(dev.name) : ""}${cam ? " • " + esc(cam) : ""}
-    ${e.rule ? " • חוק: " + esc(e.rule) : ""} • ${lbIdx + 1} מתוך ${list.length}</span>`;
+    ${e.rule ? " • חוק: " + esc(e.rule) : ""} • ${lbIdx + 1} מתוך ${list.length}</span>${faHtml(e).replace(/^<br>/, "<div></div>")}`;
   $("lbPrev").disabled = lbIdx === 0;
   $("lbNext").disabled = lbIdx === list.length - 1;
 }
@@ -316,15 +429,16 @@ function deviceRow(d) {
   const label = {on: "מחובר", off: "מנותק", never: "ממתין לחיבור ראשון"}[st];
   const camRows = closed ? "" : dc.map(c => {
     const cs = camState(d, c), isSel = sel.type === "camera" && sel.id === d.id && sel.ch === c.channel;
-    return `<div class="row camrow ${isSel ? "sel" : ""}" onclick="selectCamera('${d.id}', ${c.channel})">
+    return `<div class="row camrow ${isSel ? "sel" : ""} ${menuOpen === "cam:" + c.id ? "menu" : ""}" onclick="selectCamera('${d.id}', ${c.channel})">
       <span class="sdot ${cs.st}" title="${cs.text}"></span>
       <span class="txt"><span class="name"><span class="ch">${c.channel}</span>${ICON_CAM}${esc(camName(d, c.channel))}</span>
         <span class="meta">${cs.text}</span></span>
+      <button class="menu-btn ${menuOpen === "cam:" + c.id ? "on" : ""}" title="פעולות" onclick="event.stopPropagation(); toggleMenu('cam:${c.id}')">⋯</button>
       <span class="acts" onclick="event.stopPropagation()">
         <button class="ico del" onclick="delCam('${c.id}')">מחק</button>
       </span></div>`;
   }).join("");
-  return `<div class="row ${sel.type === "device" && sel.id === d.id ? "sel" : ""}" onclick="selectDevice('${d.id}')">
+  return `<div class="row ${sel.type === "device" && sel.id === d.id ? "sel" : ""} ${menuOpen === key ? "menu" : ""}" onclick="selectDevice('${d.id}')">
     <span class="caret" onclick="event.stopPropagation(); toggle('${key}')">${dc.length ? (closed ? "◂" : "▾") : "·"}</span>
     <span class="sdot ${st}" title="${label}"></span>
     <span class="txt"><span class="name">${ICON_DEVICE}${esc(d.name)}</span>
@@ -333,6 +447,7 @@ function deviceRow(d) {
     ${remoteUrl(d) ? `<button class="open-ui" title="פתיחת ממשק המכשיר בטאב חדש (דרך NetBird)"
         onclick="event.stopPropagation(); window.open('${remoteUrl(d)}', '_blank', 'noopener')">פתח ממשק</button>` : ""}
     ${extra ? `<span class="cnt" title="מצלמות שקיימות במחשב ולא הוגדרו במוקד">+${extra}</span>` : ""}
+    <button class="menu-btn ${menuOpen === key ? "on" : ""}" title="פעולות" onclick="event.stopPropagation(); toggleMenu('${key}')">⋯</button>
     <span class="acts" onclick="event.stopPropagation()">
       <button class="ico" onclick="setCamCount('${d.id}')">מספר מצלמות</button>
       <button class="ico" onclick="showPair('${d.id}')">קוד חיבור</button>
@@ -349,9 +464,10 @@ function folderHtml(n) {
   const c = subtree(n.id), closed = collapsed.has(n.id);
   const cnt = (c.total ? `<span class="cnt ${c.on < c.total ? "bad" : ""}" title="מכשירים מחוברים">${c.on}/${c.total}</span>` : "")
     + (c.camIssues ? ` <span class="warn" title="מצלמות מנותקות או חסרות">⚠ ${c.camIssues}</span>` : "");
-  return `<div class="folder"><div class="row ${sel.type === "folder" && sel.id === n.id ? "sel" : ""}">
+  return `<div class="folder"><div class="row ${sel.type === "folder" && sel.id === n.id ? "sel" : ""} ${menuOpen === "f:" + n.id ? "menu" : ""}">
       <span class="caret" onclick="toggle('${n.id}')">${kids.length || devs.length ? (closed ? "◂" : "▾") : "·"}</span>
       <span class="name" onclick="selectFolder('${n.id}')" title="הצג את כל האירועים של התיקייה">${n.kind === "customer" ? ICON_CUSTOMER : ICON_FOLDER}${esc(n.name)}</span> ${cnt}
+      <span style="flex:1"></span><button class="menu-btn ${menuOpen === "f:" + n.id ? "on" : ""}" title="פעולות" onclick="event.stopPropagation(); toggleMenu('f:${n.id}')">⋯</button>
       <span class="acts">
         <button class="ico" onclick="addDevice('${n.id}')">+ מכשיר</button>
         <button class="ico" onclick="addFolder('${n.id}')">+ תיקייה</button>
@@ -377,6 +493,9 @@ function renderTree() {
        <div class="kids">${loose.map(deviceRow).join("")}</div></div>` : ""))
     || '<div class="empty">העץ ריק — התחל ב"+ לקוח"</div>';
 }
+// תפריט הפעולות של שורה בעץ — נפתח ונסגר בכפתור ⋯ (שורה אחת פתוחה בכל פעם)
+let menuOpen = null;
+function toggleMenu(key) { menuOpen = menuOpen === key ? null : key; renderTree(); }
 function toggle(id) { collapsed.has(id) ? collapsed.delete(id) : collapsed.add(id); saveCollapsed(); renderTree(); }
 
 // קוד חיבור: כתובת הפרויקט + מפתח ציבורי + מזהה + אסימון — המכשיר מפענח אותו (app/central_link.py)
@@ -531,6 +650,10 @@ function evHeader() {
     $("evSub").textContent = "מכל המכשירים — מתעדכן בזמן אמת";
   }
   $("showAll").hidden = sel.type === "all";
+  if (faMode) {
+    $("evTitle").textContent = "מאגר התראות שווא" + (sel.type === "all" ? "" : " — " + $("evTitle").textContent.replace(/^.*?— /, ""));
+    $("evSub").textContent = "אירועים שסומנו כהתראת שווא (במוקד או במחשב המקומי) — לבדיקה ולטיפול";
+  }
 }
 let rows = [], evToken = 0;
 async function loadEvents() {
@@ -538,7 +661,11 @@ async function loadEvents() {
   const tok = ++evToken, ids = selDeviceIds();
   if (ids && !ids.length) { rows = []; render(rows); return; }
   feed.innerHTML = '<div class="empty">טוען אירועים...</div>';
-  let q = client.from("events").select("*").order("ts", { ascending: false }).limit(60);
+  let q = client.from("events").select("*");
+  if (faMode) {
+    q = q.not("false_alarm", "is", null).order("fa_at", { ascending: false, nullsFirst: false }).limit(200);
+    if ($("faStatus").value) q = q.eq("fa_status", $("faStatus").value);
+  } else q = q.order("ts", { ascending: false }).limit(60);
   if (ids) q = ids.length === 1 ? q.eq("device_id", ids[0]) : q.in("device_id", ids);
   if (sel.type === "camera") q = q.eq("channel", sel.ch);
   const { data, error } = await q;
@@ -559,6 +686,7 @@ if (!cfg || !cfg.anonKey || cfg.anonKey === 'מלא-כאן') {
   async function startApp() {
     $("login").hidden = true;
     $("app").hidden = false; $("live").hidden = false; $("logout").hidden = false;
+    me = ((await client.auth.getUser()).data.user || {}).email || "";
     await loadTree();
     loadEvents();
     // ירוק/אדום תלוי בזמן שעבר — מחשבים מחדש כל 5 שניות גם בלי שינוי בנתונים
@@ -569,9 +697,16 @@ if (!cfg || !cfg.anonKey || cfg.anonKey === 'מלא-כאן') {
         const ids = selDeviceIds();
         if (ids && !ids.includes(payload.new.device_id)) return;   // לא שייך לבחירה הנוכחית
         if (sel.type === "camera" && payload.new.channel !== sel.ch) return;
+        if (faMode) return;
         rows = [payload.new, ...rows].slice(0, 60);
         await signImages(client, [payload.new]);
         render(rows);
+      })
+      // סימון שווא שהוחל במכשיר / סומן במחשב המקומי — מעדכנים את השורה שמוצגת
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "events" }, payload => {
+        const r = rows.find(e => e.id === payload.new.id);
+        if (!r || document.activeElement && document.activeElement.closest && document.activeElement.closest(".fa-meta")) return;
+        Object.assign(r, payload.new); render(rows);
       }).subscribe());
     // כל הארטביט / שינוי בעץ — מרעננים
     channels.push(client.channel("tree")
