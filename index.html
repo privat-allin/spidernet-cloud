@@ -59,8 +59,12 @@
   .row .name { font-size:14px; }
   .row .meta { font-size:12px; color:var(--muted); }
   /* כפתורי פעולה — רק במעבר עכבר או בשורה הנבחרת, כדי שהעץ יישאר קריא */
-  .row .acts { margin-inline-start:auto; display:none; gap:4px; flex:none; }
-  .row:hover .acts, .row.sel .acts { display:flex; }
+  /* כפתורי הפעולות — בשורה נפרדת מתחת לשורה הנבחרת, כדי שלא ידחקו ויזיזו את התוכן */
+  .row { flex-wrap:wrap; }
+  .row .acts { display:none; flex-basis:100%; flex-wrap:wrap; gap:5px; padding:6px 0 2px; padding-inline-start:26px; }
+  .row.sel .acts { display:flex; }
+  .row .acts .ico { padding:4px 10px; font-size:12.5px; }
+  .row .open-ui { flex:none; }
   .row .txt { display:flex; flex-direction:column; min-width:0; flex:1; }
   .row .txt .name, .row .txt .meta { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .ico { background:none; border:1px solid var(--border); color:var(--muted); border-radius:6px; padding:2px 8px; font-size:12px; cursor:pointer; font-family:inherit; }
