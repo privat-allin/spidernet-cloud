@@ -155,14 +155,15 @@ function render(rows) {
   feed.innerHTML = rows.map(e => {
     const src = signed.get(e.image_path);
     const img = src ? `<img src="${esc(src)}">` : "";
-    const kind = e.kind === "camera" ? `<span class="badge cam">בריאות מצלמה</span>` : `<span class="badge">${esc(e.action)}</span>`;
+    const act = {alert: "התראה", log: "רישום", clip: "קליפ"}[e.action] || e.action;
+    const kind = e.kind === "camera" ? `<span class="badge cam">תקינות מצלמה</span>` : `<span class="badge">${esc(act)}</span>`;
     const evDev = devices.find(x => x.id === e.device_id);
     const cn = e.channel && evDev && ((evDev.info || {}).cameras || []).some(x => x.ch === e.channel)
       ? camName(evDev, e.channel) : e.camera;
     const camn = cn ? `<span class="badge camn">${esc(cn)}</span>` : "";
     const dev = devices.find(d => d.id === e.device_id);
     const devn = dev && sel.type !== "device" ? `<span class="badge" style="background:#12261a;color:var(--green)">${esc(dev.name)}</span>` : "";
-    const site = e.site ? `<span class="site">${esc(e.site)}</span> • ` : "";
+    const site = e.site && e.site !== "main" ? `<span class="site">${esc(e.site)}</span> • ` : "";
     return `<div class="ev">${img}<div class="meta">${kind}${devn}${camn}
       <b>${new Date((e.ts || 0) * 1000).toLocaleString("he-IL")}</b><br>${esc(e.message)}<br>
       <span class="site">${site}חוק: ${esc(e.rule || "-")}</span></div></div>`;
