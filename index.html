@@ -482,9 +482,14 @@ async function setInterval_(id) {
   const v = parseInt(prompt("כל כמה שניות המכשיר ידווח שהוא חי? (10–3600, ברירת מחדל 60)", d.heartbeat_sec), 10);
   if (v >= 10 && v <= 3600 && v !== d.heartbeat_sec) await db(client.from("devices").update({heartbeat_sec: v}).eq("id", id));
 }
+const DELETE_CODE = "1234";
 async function delDevice(id) {
   const d = devices.find(x => x.id === id);
-  if (!confirm(`למחוק את "${d.name}"? המכשיר יפסיק להיות מוכר למוקד (קוד החיבור שלו יבוטל).`)) return;
+  // קוד אישור נגד מחיקה בטעות (לא אבטחה — רק שלא יימחק בקליק אחד)
+  const code = prompt(`למחוק את "${d.name}"? המכשיר יפסיק להיות מוכר למוקד (קוד החיבור שלו יבוטל).
+לאישור הקלד את קוד המחיקה:`);
+  if (code === null) return;
+  if (code.trim() !== DELETE_CODE) return alert("קוד שגוי — המכשיר לא נמחק");
   await db(client.from("devices").delete().eq("id", id));
 }
 
