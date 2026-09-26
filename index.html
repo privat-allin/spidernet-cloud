@@ -66,6 +66,9 @@
   .ico { background:none; border:1px solid var(--border); color:var(--muted); border-radius:6px; padding:2px 8px; font-size:12px; cursor:pointer; font-family:inherit; }
   .ico:hover { color:var(--text); }
   .ico.del:hover { color:var(--red); }
+  .open-ui { background:none; border:1px solid var(--accent); color:var(--accent); border-radius:6px; padding:2px 8px;
+             font-size:12px; cursor:pointer; font-family:inherit; white-space:nowrap; }
+  .open-ui:hover { background:var(--accent); color:#fff; }
   .caret { width:18px; text-align:center; cursor:pointer; color:var(--muted); user-select:none; }
   .row .name { cursor:pointer; display:flex; align-items:center; gap:7px; }
   .folder .name { font-weight:600; }
@@ -289,6 +292,14 @@ function subtree(id) {
   return {total: ds.length, on: ds.filter(d => devState(d) === "on").length,
           camIssues: ds.reduce((n, d) => n + (devState(d) === "on" ? camIssues(d) : 0), 0)};
 }
+// כתובת ממשק המכשיר ברשת NetBird — מופיעה רק כשהמכשיר מחובר ואפשר גישה מרחוק.
+// הטאב נפתח ישירות אל המכשיר; המחשב במוקד צריך להיות מחובר ל-NetBird.
+function remoteUrl(d) {
+  const r = (d.info || {}).remote || {};
+  if (devState(d) !== "on" || !r.enabled || !(r.ips || []).length) return "";
+  const ip = String(r.ips[0]), port = parseInt(r.port) || 8087;
+  return /^[\d.]+$/.test(ip) ? `http://${ip}:${port}/` : "";
+}
 function deviceRow(d) {
   const st = devState(d), i = d.info || {}, dc = devCams(d.id), key = "dev:" + d.id, closed = collapsed.has(key);
   let camsTxt = "";
@@ -315,6 +326,8 @@ function deviceRow(d) {
     <span class="txt"><span class="name">${ICON_DEVICE}${esc(d.name)}</span>
       <span class="meta">${label} • ${agoText(d.last_seen)}${camsTxt} • כל ${d.heartbeat_sec} שנ'</span></span>
     ${issues ? `<span class="warn" title="מצלמות מנותקות או חסרות">⚠ ${issues}</span>` : ""}
+    ${remoteUrl(d) ? `<button class="open-ui" title="פתיחת ממשק המכשיר בטאב חדש (דרך NetBird)"
+        onclick="event.stopPropagation(); window.open('${remoteUrl(d)}', '_blank', 'noopener')">פתח ממשק</button>` : ""}
     ${extra ? `<span class="cnt" title="מצלמות שקיימות במחשב ולא הוגדרו במוקד">+${extra}</span>` : ""}
     <span class="acts" onclick="event.stopPropagation()">
       <button class="ico" onclick="setCamCount('${d.id}')">מספר מצלמות</button>
