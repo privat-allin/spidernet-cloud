@@ -272,7 +272,7 @@
   </div>
   <div class="log-tabs" id="logTabs">
     <button data-k="arming" class="on">דריכה ונטרול</button>
-    <button data-k="health">תקינות מצלמות</button>
+    <button data-k="health">תקינות מצלמות ומחשבים</button>
     <button data-k="fa">סימוני התראות שווא</button>
   </div>
   <div style="overflow-y:auto; flex:1; min-height:120px" id="logBody"></div>
@@ -346,7 +346,8 @@ function render(rows) {
     const src = signed.get(e.image_path);
     const img = src ? `<img src="${esc(src)}" onclick="openEvent('${e.id}')" title="לחץ להגדלה">` : "";
     const act = {alert: "התראה", log: "רישום", clip: "קליפ"}[e.action] || e.action;
-    const kind = e.kind === "camera" ? `<span class="badge cam">תקינות מצלמה</span>` : `<span class="badge">${esc(act)}</span>`;
+    const kind = e.kind === "camera" ? `<span class="badge cam">תקינות מצלמה</span>`
+      : e.kind === "device" ? `<span class="badge cam">תקינות מחשב</span>` : `<span class="badge">${esc(act)}</span>`;
     const evDev = devices.find(x => x.id === e.device_id);
     const cn = e.channel && evDev && ((evDev.info || {}).cameras || []).some(x => x.ch === e.channel)
       ? camName(evDev, e.channel) : e.camera;
@@ -549,7 +550,7 @@ async function loadLogs() {
       <td>${ARM_ACT[r.action] || esc(r.action)}</td><td>${r.action === "auto" ? "" : (r.minutes ? r.minutes + " דק'" : "מלא")}</td>
       <td>${esc(r.who || "")} <span style="color:var(--muted)">(${r.source === "customer" ? "לקוח" : "מוקד"})</span></td></tr>`);
   } else if (logKind === "health") {
-    q = client.from("events").select("ts,device_id,channel,camera,message").eq("kind", "camera").order("ts", {ascending: false}).limit(300);
+    q = client.from("events").select("ts,device_id,channel,camera,message").in("kind", ["camera", "device"]).order("ts", {ascending: false}).limit(300);
     if (dev) q = q.eq("device_id", dev);
     const { data, error } = await q; if (error) return $("logBody").textContent = error.message;
     head = "<th>זמן</th><th>מכשיר</th><th>מצלמה</th><th>מה קרה</th>";
@@ -617,7 +618,7 @@ $("custModal").onclick = e => { if (e.target.id === "custModal") $("custModal").
 // דורש שהמחשב במוקד מחובר ל-NetBird, שהמחשב של הלקוח מחובר, ושהגישה מרחוק מופעלת בו.
 function clipUrl(e) {
   const d = devices.find(x => x.id === e.device_id);
-  if (!d || e.kind === "camera") return "";
+  if (!d || e.kind === "camera" || e.kind === "device") return "";
   const base = remoteUrl(d);
   return base ? `${base}clip/${encodeURIComponent(e.id)}` : "";
 }
@@ -634,7 +635,7 @@ const HEB_CLS = {person: "אדם", light: "אור נע", car: "רכב", truck: "
 const FA_STATUS = {new: "חדש", reviewed: "נבדק", fixed: "טופל"};
 let faMode = false, me = "";
 function faHtml(e) {
-  if (e.kind === "camera") return "";
+  if (e.kind === "camera" || e.kind === "device") return "";
   if (!e.false_alarm) {
     return (e.dets || []).length && signed.get(e.image_path)
       ? `<br><button class="fa-btn" onclick="openFa('${e.id}')">התראת שווא?</button>` : "";
