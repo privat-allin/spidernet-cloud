@@ -357,7 +357,7 @@ function render(rows) {
     const site = e.site && e.site !== "main" ? `<span class="site">${esc(e.site)}</span> • ` : "";
     return `<div class="ev">${img}<div class="meta" style="flex:1; min-width:0">${kind}${devn}${camn}
       <b>${new Date((e.ts || 0) * 1000).toLocaleString("he-IL")}</b><br>${esc(e.message)}<br>
-      <span class="site">${site}חוק: ${esc(e.rule || "-")}</span>${clipBtn(e)}${faHtml(e)}</div></div>`;
+      <span class="site">${site}${e.kind === "device" || e.kind === "camera" ? "" : "חוק: " + esc(e.rule || "-")}</span>${clipBtn(e)}${faHtml(e)}</div></div>`;
   }).join("");
 }
 
