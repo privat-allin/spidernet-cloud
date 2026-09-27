@@ -85,6 +85,7 @@
   .sdot { width:11px; height:11px; border-radius:50%; flex:none; background:#555; }
   .sdot.on { background:var(--green); box-shadow:0 0 6px var(--green); }
   .sdot.off, .sdot.missing { background:var(--red); }
+  .sdot.check { background:#d29922; animation:p 1.2s infinite; }
   .sdot.unk { background:#555; }
   .camrow .name { font-weight:400; font-size:13px; }
   .camrow .ch { color:var(--muted); font-size:11.5px; margin-inline-end:2px; }
@@ -355,7 +356,7 @@ function render(rows) {
     const site = e.site && e.site !== "main" ? `<span class="site">${esc(e.site)}</span> • ` : "";
     return `<div class="ev">${img}<div class="meta" style="flex:1; min-width:0">${kind}${devn}${camn}
       <b>${new Date((e.ts || 0) * 1000).toLocaleString("he-IL")}</b><br>${esc(e.message)}<br>
-      <span class="site">${site}חוק: ${esc(e.rule || "-")}</span>${faHtml(e)}</div></div>`;
+      <span class="site">${site}חוק: ${esc(e.rule || "-")}</span>${clipBtn(e)}${faHtml(e)}</div></div>`;
   }).join("");
 }
 
@@ -611,6 +612,21 @@ $("custAdd").onclick = async () => {
 $("custClose").onclick = () => $("custModal").hidden = true;
 $("custModal").onclick = e => { if (e.target.id === "custModal") $("custModal").hidden = true; };
 
+// ================= סרטון אירוע — ישירות מהמחשב של הלקוח (דרך NetBird) =================
+// הסרטונים לא עולים לענן (חוסך מקום). הכפתור פותח טאב לדף /clip/<אירוע> במחשב — כמו "פתח ממשק":
+// דורש שהמחשב במוקד מחובר ל-NetBird, שהמחשב של הלקוח מחובר, ושהגישה מרחוק מופעלת בו.
+function clipUrl(e) {
+  const d = devices.find(x => x.id === e.device_id);
+  if (!d || e.kind === "camera") return "";
+  const base = remoteUrl(d);
+  return base ? `${base}clip/${encodeURIComponent(e.id)}` : "";
+}
+function clipBtn(e) {
+  const u = clipUrl(e);
+  return u ? `<br><button class="fa-btn" title="נפתח בטאב חדש ישירות מהמחשב באתר (NetBird)"
+    onclick="event.stopPropagation(); window.open('${u}', '_blank', 'noopener')">▶ סרטון</button>` : "";
+}
+
 // ================= התראות שווא =================
 // המוקדן מסמן כאן → המכשיר מושך את הסימון (fa_applied) ויוצר אזור התעלמות. סימון במחשב המקומי עולה לכאן.
 // המאגר = כל האירועים שסומנו, עם סטטוס טיפול והערה — לבדיקה ושיפור המערכת בהמשך.
@@ -700,7 +716,7 @@ function showLb() {
   const cam = e.channel && dev ? camName(dev, e.channel) : e.camera;
   $("lbCap").innerHTML = `<b>${esc(e.message)}</b><br>
     <span class="t">${new Date((e.ts || 0) * 1000).toLocaleString("he-IL")}${dev ? " • " + esc(dev.name) : ""}${cam ? " • " + esc(cam) : ""}
-    ${e.rule ? " • חוק: " + esc(e.rule) : ""} • ${lbIdx + 1} מתוך ${list.length}</span>${faHtml(e).replace(/^<br>/, "<div></div>")}`;
+    ${e.rule ? " • חוק: " + esc(e.rule) : ""} • ${lbIdx + 1} מתוך ${list.length}</span>${clipBtn(e).replace(/^<br>/, " ")}${faHtml(e).replace(/^<br>/, "<div></div>")}`;
   $("lbPrev").disabled = lbIdx === 0;
   $("lbNext").disabled = lbIdx === list.length - 1;
 }
@@ -758,11 +774,31 @@ function camIssues(d) { return devCams(d.id).filter(c => ["off", "missing"].incl
 const collapsed = new Set(JSON.parse(localStorage.getItem("collapsed") || "[]"));
 const saveCollapsed = () => localStorage.setItem("collapsed", JSON.stringify([...collapsed]));
 
-// מחובר = דיווח אחרון בתוך מרווח הדיווח + מרווח ביטחון (רשת איטית, שעון לא מסונכרן)
+// מחובר = דיווח אחרון בתוך מרווח הדיווח + מרווח ביטחון (רשת איטית, שעון לא מסונכרן).
+// לפני שמכריזים "מנותק" — בדיקה נוספת: שולפים את המכשיר מחדש מהענן אחרי 10 שנ' (העדכון החי אולי פספס דיווח),
+// ורק אם גם אז הדיווח ישן — מנותק. בינתיים: "בודק חיבור..." (נחשב מחובר), בלי התראת שווא.
+const offCheck = new Map();          // device id → מתי הניתוק מאושר (אחרי הבדיקה החוזרת)
+const OFF_RECHECK_MS = 10000, OFF_CONFIRM_MS = 15000;
 function devState(d) {
   if (!d.last_seen) return "never";
   const age = (Date.now() - new Date(d.last_seen).getTime()) / 1000;
-  return age <= Math.max(d.heartbeat_sec * 1.5, d.heartbeat_sec + 20) ? "on" : "off";
+  if (age <= Math.max(d.heartbeat_sec * 1.5, d.heartbeat_sec + 20)) { offCheck.delete(d.id); return "on"; }
+  if (!offCheck.has(d.id)) {
+    offCheck.set(d.id, Date.now() + OFF_CONFIRM_MS);
+    setTimeout(() => recheckDevice(d.id), OFF_RECHECK_MS);
+  }
+  return Date.now() < offCheck.get(d.id) ? "on" : "off";
+}
+const devChecking = d => offCheck.has(d.id) && Date.now() < offCheck.get(d.id);
+async function recheckDevice(id) {
+  const { data, error } = await client.from("devices").select("last_seen, info").eq("id", id).maybeSingle();
+  if (error) {                       // המוקד עצמו לא הצליח לבדוק (אינטרנט במוקד) — לא מאשרים ניתוק, בודקים שוב
+    offCheck.set(id, Date.now() + OFF_CONFIRM_MS);
+    return setTimeout(() => recheckDevice(id), OFF_RECHECK_MS);
+  }
+  const d = devices.find(x => x.id === id);
+  if (data && d) { d.last_seen = data.last_seen; d.info = data.info; }
+  renderTree();
 }
 function agoText(ts) {
   if (!ts) return "טרם התחבר";
@@ -798,7 +834,7 @@ function deviceRow(d) {
   } else if (i.cameras_total) camsTxt = ` • ${i.cameras_total} מצלמות במחשב (לא הוגדרו במוקד)`;
   const extra = st === "on" ? ((i.cameras || []).filter(r => !dc.some(c => c.channel === r.ch)).length) : 0;
   const issues = st === "on" ? camIssues(d) : 0;
-  const label = {on: "מחובר", off: "מנותק", never: "ממתין לחיבור ראשון"}[st];
+  const label = devChecking(d) ? "בודק חיבור..." : {on: "מחובר", off: "מנותק", never: "ממתין לחיבור ראשון"}[st];
   const camRows = closed ? "" : dc.map(c => {
     const cs = camState(d, c), isSel = sel.type === "camera" && sel.id === d.id && sel.ch === c.channel;
     return `<div class="row camrow ${isSel ? "sel" : ""} ${menuOpen === "cam:" + c.id ? "menu" : ""}" onclick="selectCamera('${d.id}', ${c.channel})">
@@ -812,7 +848,7 @@ function deviceRow(d) {
   }).join("");
   return `<div class="row ${sel.type === "device" && sel.id === d.id ? "sel" : ""} ${menuOpen === key ? "menu" : ""}" onclick="selectDevice('${d.id}')">
     <span class="caret" onclick="event.stopPropagation(); toggle('${key}')">${dc.length ? (closed ? "◂" : "▾") : "·"}</span>
-    <span class="sdot ${st}" title="${label}"></span>
+    <span class="sdot ${devChecking(d) ? "check" : st}" title="${label}"></span>
     <span class="txt"><span class="name">${ICON_DEVICE}${esc(d.name)}</span>
       <span class="meta">${label} • ${agoText(d.last_seen)}${camsTxt} • אות חיים כל ${d.heartbeat_sec} שנ'${i.ver ? ` • גרסה ${esc(i.ver)}${i.channel === "beta" ? " (בדיקות)" : ""}` : ""}</span></span>
     ${issues ? `<span class="warn" title="מצלמות מנותקות או חסרות">⚠ ${issues}</span>` : ""}
