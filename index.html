@@ -825,6 +825,11 @@ function remoteUrl(d) {
   const ip = String(r.ips[0]), port = parseInt(r.port) || 8087;
   return /^[\d.]+$/.test(ip) ? `http://${ip}:${port}/` : "";
 }
+// פרופיל יום/לילה שהמחשב מדווח לכל מצלמה (רק אם הופעל בה)
+function camPhase(d, ch) {
+  const r = (((d && d.info) || {}).cameras || []).find(x => x.ch === ch);
+  return r && r.phase ? ` <span title="פרופיל ${r.phase === "night" ? "לילה" : "יום"}">${r.phase === "night" ? "🌙" : "☀️"}</span>` : "";
+}
 function deviceRow(d) {
   const st = devState(d), i = d.info || {}, dc = devCams(d.id), key = "dev:" + d.id, closed = collapsed.has(key);
   let camsTxt = "";
@@ -839,7 +844,7 @@ function deviceRow(d) {
     const cs = camState(d, c), isSel = sel.type === "camera" && sel.id === d.id && sel.ch === c.channel;
     return `<div class="row camrow ${isSel ? "sel" : ""} ${menuOpen === "cam:" + c.id ? "menu" : ""}" onclick="selectCamera('${d.id}', ${c.channel})">
       <span class="sdot ${cs.st}" title="${cs.text}"></span>
-      <span class="txt"><span class="name"><span class="ch">${c.channel}</span>${ICON_CAM}${esc(camName(d, c.channel))}</span>
+      <span class="txt"><span class="name"><span class="ch">${c.channel}</span>${ICON_CAM}${esc(camName(d, c.channel))}${camPhase(d, c.channel)}</span>
         <span class="meta">${cs.text}</span></span>
       <button class="menu-btn ${menuOpen === "cam:" + c.id ? "on" : ""}" title="פעולות" onclick="event.stopPropagation(); toggleMenu('cam:${c.id}')">⋯</button>
       <span class="acts" onclick="event.stopPropagation()">
