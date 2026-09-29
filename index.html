@@ -882,6 +882,7 @@ function deviceRow(d) {
       <button class="ico" onclick="renameDevice('${d.id}')">שם</button>
       <button class="ico" onclick="moveDevice('${d.id}')">העבר</button>
       <button class="ico" onclick="setInterval_('${d.id}')">אות חיים</button>
+      ${ext ? `<button class="ico" onclick="setCamOffline('${d.id}')">ניתוק מצלמה</button>` : ""}
       <button class="ico del" onclick="delDevice('${d.id}')">מחק</button>
     </span></div>
     ${camRows ? `<div class="kids">${camRows}</div>` : ""}`;
@@ -1063,6 +1064,12 @@ async function moveDevice(id) {
   const pick = prompt(`להעביר את "${d.name}" לאיזו תיקייה? הקלד מספר:\n` + list.map((x, i) => `${i + 1}. ${x.path}`).join("\n"));
   const i = parseInt(pick, 10) - 1;
   if (list[i]) await db(client.from("devices").update({node_id: list[i].id}).eq("id", id));
+}
+async function setCamOffline(id) {
+  const d = devices.find(x => x.id === id);
+  const cur = d.cam_offline_sec ?? 60;
+  const v = parseInt(prompt("התראת ניתוק מצלמה — אחרי כמה שניות של ניתוק להתריע? (0 = מיד, עד 3600, ברירת מחדל 60)", cur), 10);
+  if (v >= 0 && v <= 3600 && v !== cur) await db(client.from("devices").update({cam_offline_sec: v}).eq("id", id));
 }
 async function setInterval_(id) {
   const d = devices.find(x => x.id === id);
