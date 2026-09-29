@@ -31,6 +31,7 @@
   .ev .meta { font-size:13px; line-height:1.55; }
   .badge { display:inline-block; font-size:11px; border-radius:5px; padding:1px 8px; margin-inline-end:6px; background:#3d1d20; color:var(--red); }
   .badge.cam { background:#241a33; color:#c39dff; }
+  .badge.vendor { background:#10263a; color:#58a6ff; }
   .badge.camn { background:#1d2733; color:#79c0ff; }
   .site { font-size:11px; color:var(--muted); }
   .empty { text-align:center; color:var(--muted); padding:40px 0; }
@@ -346,9 +347,10 @@ function render(rows) {
     const src = signed.get(e.image_path);
     const img = src ? `<img src="${esc(src)}" onclick="openEvent('${e.id}')" title="לחץ להגדלה">` : "";
     const act = {alert: "התראה", log: "רישום", clip: "קליפ"}[e.action] || e.action;
-    const kind = e.kind === "camera" ? `<span class="badge cam">תקינות מצלמה</span>`
-      : e.kind === "device" ? `<span class="badge cam">תקינות מחשב</span>` : `<span class="badge">${esc(act)}</span>`;
-    const evDev = devices.find(x => x.id === e.device_id);
+    const evDev = devices.find(x => x.id === e.device_id), ext = isExt(evDev);
+    const kind = (e.kind === "camera" ? `<span class="badge cam">תקינות מצלמה</span>`
+      : e.kind === "device" ? `<span class="badge cam">תקינות ${ext ? "NVR" : "מחשב"}</span>` : `<span class="badge">${esc(act)}</span>`)
+      + (ext ? `<span class="badge vendor" title="התראה מהאנליטיקה של ה-NVR עצמו">${esc(VENDOR_NAME[evDev.vendor] || evDev.vendor)}</span>` : "");
     const cn = e.channel && evDev && ((evDev.info || {}).cameras || []).some(x => x.ch === e.channel)
       ? camName(evDev, e.channel) : e.camera;
     const camn = cn ? `<span class="badge camn">${esc(cn)}</span>` : "";
@@ -748,6 +750,10 @@ const ICON_CUSTOMER = `<svg class="ic" viewBox="0 0 24 24"><rect x="4" y="3" wid
   <rect x="6.3" y="14.1" width="2.2" height="2.2" rx=".4"/><rect x="10.5" y="14.1" width="2.2" height="2.2" rx=".4"/>
   <rect x="16.6" y="11.5" width="2.2" height="2" rx=".4"/><rect x="16.6" y="15.3" width="2.2" height="2" rx=".4"/></g>
   <rect x="8.3" y="17.6" width="2.4" height="3.4" fill="#1e3a8a"/></svg>`;
+const VENDOR_NAME = {provision: "Provision", hikvision: "Hikvision", dahua: "Dahua"};
+const isExt = d => !!(d && d.vendor && d.vendor !== "spidernet");
+const ICON_NVR = `<svg class="ic" viewBox="0 0 24 24" style="width:18px;height:18px"><rect x="2" y="7" width="20" height="10" rx="2" fill="#4b5563"/>
+  <circle cx="6" cy="12" r="1.3" fill="#3fb950"/><rect x="10" y="10.5" width="9" height="3" rx="1" fill="#1f2937"/></svg>`;
 const ICON_DEVICE = `<svg class="ic" viewBox="0 0 24 24" style="width:18px;height:18px"><rect x="3" y="4" width="18" height="12" rx="2" fill="#4b5563"/>
   <rect x="5" y="6" width="14" height="8" rx="1" fill="#111827"/><circle cx="12" cy="10" r="2.4" fill="#60a5fa"/>
   <rect x="9" y="17.5" width="6" height="2.5" rx="1" fill="#6b7280"/></svg>`;
@@ -832,12 +838,12 @@ function camPhase(d, ch) {
   return r && r.phase ? ` <span title="פרופיל ${r.phase === "night" ? "לילה" : "יום"}">${r.phase === "night" ? "🌙" : "☀️"}</span>` : "";
 }
 function deviceRow(d) {
-  const st = devState(d), i = d.info || {}, dc = devCams(d.id), key = "dev:" + d.id, closed = collapsed.has(key);
+  const st = devState(d), i = d.info || {}, dc = devCams(d.id), key = "dev:" + d.id, closed = collapsed.has(key), ext = isExt(d);
   let camsTxt = "";
   if (dc.length) {
     const ok = dc.filter(c => camState(d, c).st === "on").length;
     camsTxt = st === "on" ? ` • מצלמות ${ok}/${dc.length}` : ` • ${dc.length} מצלמות`;
-  } else if (i.cameras_total) camsTxt = ` • ${i.cameras_total} מצלמות במחשב (לא הוגדרו במוקד)`;
+  } else if (i.cameras_total) camsTxt = ` • ${i.cameras_total} ${ext ? "ערוצים דיווחו" : "מצלמות במחשב"} (לא הוגדרו במוקד)`;
   const extra = st === "on" ? ((i.cameras || []).filter(r => !dc.some(c => c.channel === r.ch)).length) : 0;
   const issues = st === "on" ? camIssues(d) : 0;
   const label = devChecking(d) ? "בודק חיבור..." : {on: "מחובר", off: "מנותק", never: "ממתין לחיבור ראשון"}[st];
@@ -855,11 +861,13 @@ function deviceRow(d) {
   return `<div class="row ${sel.type === "device" && sel.id === d.id ? "sel" : ""} ${menuOpen === key ? "menu" : ""}" onclick="selectDevice('${d.id}')">
     <span class="caret" onclick="event.stopPropagation(); toggle('${key}')">${dc.length ? (closed ? "◂" : "▾") : "·"}</span>
     <span class="sdot ${devChecking(d) ? "check" : st}" title="${label}"></span>
-    <span class="txt"><span class="name">${ICON_DEVICE}${esc(d.name)}</span>
-      <span class="meta">${label} • ${agoText(d.last_seen)}${camsTxt} • אות חיים כל ${d.heartbeat_sec} שנ'${i.ver ? ` • גרסה ${esc(i.ver)}${i.channel === "beta" ? " (בדיקות)" : ""}` : ""}</span></span>
+    <span class="txt"><span class="name">${ext ? ICON_NVR : ICON_DEVICE}${esc(d.name)}</span>
+      <span class="meta">${label} • ${agoText(d.last_seen)}${camsTxt} • אות חיים כל ${d.heartbeat_sec} שנ'${ext
+        ? ` • NVR ${esc(VENDOR_NAME[d.vendor] || d.vendor)}${i.sn ? " • " + esc(i.sn) : ""}`
+        : i.ver ? ` • גרסה ${esc(i.ver)}${i.channel === "beta" ? " (בדיקות)" : ""}` : ""}</span></span>
     ${issues ? `<span class="warn" title="מצלמות מנותקות או חסרות">⚠ ${issues}</span>` : ""}
     ${armBadge(d)}
-    ${updBadge(d)}
+    ${ext ? "" : updBadge(d)}
     ${remoteUrl(d) ? `<button class="open-ui" title="פתיחת ממשק המכשיר בטאב חדש (דרך NetBird)"
         onclick="event.stopPropagation(); window.open('${remoteUrl(d)}', '_blank', 'noopener')">פתח ממשק</button>` : ""}
     ${extra ? `<span class="cnt" title="מצלמות שקיימות במחשב ולא הוגדרו במוקד">+${extra}</span>` : ""}
@@ -867,9 +875,10 @@ function deviceRow(d) {
     <span class="acts" onclick="event.stopPropagation()">
       <button class="ico" onclick="openArming('${d.id}')">דריכה</button>
       <button class="ico" onclick="openLogs('${d.id}')">יומן</button>
-      <button class="ico" onclick="openUpdate('${d.id}')">עדכון גרסה</button>
+      ${ext ? "" : `<button class="ico" onclick="openUpdate('${d.id}')">עדכון גרסה</button>`}
       <button class="ico" onclick="setCamCount('${d.id}')">מספר מצלמות</button>
-      <button class="ico" onclick="showPair('${d.id}')">קוד חיבור</button>
+      ${ext ? `<button class="ico" onclick="showNvrSetup('${d.id}')">הגדרות חיבור</button>`
+            : `<button class="ico" onclick="showPair('${d.id}')">קוד חיבור</button>`}
       <button class="ico" onclick="renameDevice('${d.id}')">שם</button>
       <button class="ico" onclick="moveDevice('${d.id}')">העבר</button>
       <button class="ico" onclick="setInterval_('${d.id}')">אות חיים</button>
@@ -889,6 +898,7 @@ function folderHtml(n) {
       <span style="flex:1"></span><button class="menu-btn ${menuOpen === "f:" + n.id ? "on" : ""}" title="פעולות" onclick="event.stopPropagation(); toggleMenu('f:${n.id}')">⋯</button>
       <span class="acts">
         <button class="ico" onclick="addDevice('${n.id}')">+ מכשיר</button>
+        <button class="ico" onclick="addNvr('${n.id}')">+ NVR (Provision)</button>
         <button class="ico" onclick="addFolder('${n.id}')">+ תיקייה</button>
         <button class="ico" onclick="renameFolder('${n.id}')">שם</button>
         <button class="ico" onclick="openCustomers('${n.id}')">משתמשי לקוח</button>
@@ -983,6 +993,39 @@ async function addDevice(nodeId) {
   const data = await db(client.from("devices").insert({name: name.trim(), node_id: nodeId}).select());
   collapsed.delete(nodeId); saveCollapsed(); renderTree();
   showPair(data[0].id);   // מיד אחרי ההוספה — הקוד להדבקה במכשיר
+}
+// ================= NVR של יצרן אחר (Provision) — שולח התראות ישירות לענן, בלי מחשב באתר =================
+// ה-NVR הוא שורה ב-devices עם vendor; ההתראות נכנסות דרך ממסר ← RPC ingest_nvr (cloud/external-nvr-schema.sql).
+async function addNvr(nodeId) {
+  const name = prompt("שם ה-NVR (למשל: NVR Provision — מחסן):");
+  if (!name || !name.trim()) return;
+  const data = await db(client.from("devices").insert({name: name.trim(), node_id: nodeId, vendor: "provision", heartbeat_sec: 30}).select());
+  collapsed.delete(nodeId); saveCollapsed(); renderTree();
+  showNvrSetup(data[0].id);
+}
+function nvrSetupText(d) {
+  return [
+    `הגדרה ב-NVR של Provision (דפדפן / ענן Provision):`,
+    `Settings → Events and Analytics → Event notification → Alarm Server`,
+    ``,
+    `Enable: ✓`,
+    `Server address: ${cfg.nvrRelayHost || "(כתובת הממסר טרם הוגדרה)"}`,
+    `URL: /spidernet/${d.vendor}/${d.token}`,
+    `Port: 80`,
+    `Protocol: XML`,
+    `Send Heartbeat: ✓   Interval Time: ${d.heartbeat_sec}`,
+    `Schedule: 24x7`,
+    `Alert type → Configure: להוציא את "Motion alert" (תנועה לא נשלחת למוקד ממילא)`,
+    ``,
+    `ואז Apply. אנליטיקה (חציית קו / אזור סטרילי / כניסה לאזור) מוגדרת במצלמות:`,
+    `Settings → Analytics → Perimeter Monitoring (DDA) — Enable + אזור + Detection Object + Apply.`,
+  ].join("\n");
+}
+function showNvrSetup(id) {
+  const d = devices.find(x => x.id === id);
+  $("pairTitle").textContent = `הגדרות חיבור — ${d.name}`;
+  $("pairCode").value = nvrSetupText(d);
+  $("pairModal").hidden = false;
 }
 // מספר המצלמות של המכשיר = ערוצים 1..N. השמות מגיעים מהמחשב, לא מוגדרים כאן
 async function setCamCount(deviceId) {
