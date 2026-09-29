@@ -1168,10 +1168,12 @@ if (!cfg || !cfg.anonKey || cfg.anonKey === 'מלא-כאן') {
         render(rows);
       })
       // סימון שווא שהוחל במכשיר / סומן במחשב המקומי — מעדכנים את השורה שמוצגת
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "events" }, payload => {
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "events" }, async payload => {
         const r = rows.find(e => e.id === payload.new.id);
         if (!r || document.activeElement && document.activeElement.closest && document.activeElement.closest(".fa-meta")) return;
-        Object.assign(r, payload.new); render(rows);
+        Object.assign(r, payload.new);
+        await signImages(client, [r]);   // תמונה שהוצמדה לאירוע אחרי שנוצר (NVR חיצוני) — צריך קישור חתום כדי להציג אותה
+        render(rows);
       }).subscribe());
     // כל הארטביט / שינוי בעץ — מרעננים
     channels.push(client.channel("tree")
