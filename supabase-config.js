@@ -4,7 +4,7 @@
 const SUPABASE_CONFIG = {
   url: 'https://cgxbkmhphmpjvanofsrx.supabase.co',
   // כתובת הממסר שה-NVR שולח אליו התראות (HTTP רגיל) — ראו cloud/relay/worker.js.
-  // זמני: מנהרת Cloudflare מהמחשב במשרד (tools/nvr_relay.py); יוחלף בכתובת ה-Worker הקבועה.
-  nvrRelayHost: 'radical-lakes-rebound-smile.trycloudflare.com',
+  // Cloudflare Worker "spidernet-nvr" (חשבון Cloudflare של kobiko3030) — מקבל HTTP מה-NVR ומעביר ל-ingest_nvr.
+  nvrRelayHost: 'spidernet-nvr.kobiko3030.workers.dev',
   anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNneGJrbWhwaG1wanZhbm9mc3J4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAzNTMwMDgsImV4cCI6MjEwNTkyOTAwOH0.EmWLMQ91yIjwISCqF1y-2Bau_Gc7hruSJTihxoG5wnY',
 };
