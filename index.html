@@ -353,8 +353,10 @@ function render(rows) {
       + (ext ? `<span class="badge vendor" title="התראה מהאנליטיקה של ה-NVR עצמו">${esc(VENDOR_NAME[evDev.vendor] || evDev.vendor)}</span>` : "");
     const cn = e.channel && evDev && ((evDev.info || {}).cameras || []).some(x => x.ch === e.channel)
       ? camName(evDev, e.channel) : e.camera;
-    const camn = cn ? `<span class="badge camn">${esc(cn)}</span>` : "";
-    const dev = devices.find(d => d.id === e.device_id);
+    const aiB = e.ai ? `<span class="badge" title="ניתוח AI (${esc(e.ai.mode)}): ${e.ai.persons} אנשים, ${e.ai.vehicles} כלי רכב, ביטחון ${e.ai.max_conf}"
+      style="${e.ai.has_target ? "" : "background:#3a1d1d;color:#ff8a8a"}">AI: ${e.ai.has_target ? "אדם/רכב" : "לא זוהה"}</span>` : "";
+    const camn = aiB + (cn ? `<span class="badge camn">${esc(cn)}</span>` : "");
+    const dev =devices.find(d => d.id === e.device_id);
     const devn = dev && sel.type !== "device" ? `<span class="badge" style="background:#12261a;color:var(--green)">${esc(dev.name)}</span>` : "";
     const site = e.site && e.site !== "main" ? `<span class="site">${esc(e.site)}</span> • ` : "";
     return `<div class="ev">${img}<div class="meta" style="flex:1; min-width:0">${kind}${devn}${camn}
@@ -883,6 +885,7 @@ function deviceRow(d) {
       <button class="ico" onclick="moveDevice('${d.id}')">העבר</button>
       <button class="ico" onclick="setInterval_('${d.id}')">אות חיים</button>
       ${ext ? `<button class="ico" onclick="setCamOffline('${d.id}')">ניתוק מצלמה</button>` : ""}
+      ${ext ? `<button class="ico" onclick="setAiFilter('${d.id}')">סינון AI: ${{off: "כבוי", shadow: "הצללה", on: "פעיל"}[d.ai_filter] || "כבוי"}</button>` : ""}
       <button class="ico del" onclick="delDevice('${d.id}')">מחק</button>
     </span></div>
     ${camRows ? `<div class="kids">${camRows}</div>` : ""}`;
@@ -1064,6 +1067,12 @@ async function moveDevice(id) {
   const pick = prompt(`להעביר את "${d.name}" לאיזו תיקייה? הקלד מספר:\n` + list.map((x, i) => `${i + 1}. ${x.path}`).join("\n"));
   const i = parseInt(pick, 10) - 1;
   if (list[i]) await db(client.from("devices").update({node_id: list[i].id}).eq("id", id));
+}
+async function setAiFilter(id) {
+  const d = devices.find(x => x.id === id);
+  const cur = d.ai_filter || "off";
+  const v = (prompt("סינון AI (אדם/רכב) לתמונות מה-NVR — off = כבוי, shadow = הצללה (מנתח ורושם באירוע, לא משפיע על התראות)", cur) || "").trim();
+  if (["off", "shadow"].includes(v) && v !== cur) await db(client.from("devices").update({ai_filter: v}).eq("id", id));
 }
 async function setCamOffline(id) {
   const d = devices.find(x => x.id === id);
